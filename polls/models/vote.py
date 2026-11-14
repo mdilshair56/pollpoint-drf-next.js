@@ -1,23 +1,24 @@
 from django.conf import settings
 from django.db import models
-from common.models import TimeStampedModel
+
+from common.time_model import TimeStampedModel
 
 
 class Vote(TimeStampedModel):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name="user",
+        related_name="votes",
     )
     poll_question = models.ForeignKey(
-        'PollQuestion',
+        "PollQuestion",
         on_delete=models.CASCADE,
-        related_name="questions",
+        related_name="votes",
     )
     answer = models.ForeignKey(
-        'AnswerOption',
+        "AnswerOption",
         on_delete=models.CASCADE,
-        related_name="AnswerOptions",
+        related_name="votes",
     )
 
     class Meta:
@@ -25,6 +26,7 @@ class Vote(TimeStampedModel):
         verbose_name_plural = "Votes"
         ordering = ["-created_at"]
         constraints = [
+            # Enforce one stored vote per user and poll-specific question.
             models.UniqueConstraint(
                 fields=["user", "poll_question"],
                 name="unique_user_vote_per_question",

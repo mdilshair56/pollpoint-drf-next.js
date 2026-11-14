@@ -1,11 +1,12 @@
 from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.permissions import AllowAny
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from common.exceptions import APIValidationError, ResourceNotFoundError
+from common.exceptions import APIValidationError
 from auth.serializers.login_otp_serializer import (
     LoginOTPRequestSerializer,
     LoginOTPVerifySerializer,
@@ -17,6 +18,8 @@ User = get_user_model()
 
 class LoginOTPRequestView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "otp_request"
 
     def post(self, request):
         serializer = LoginOTPRequestSerializer(data=request.data)
@@ -30,18 +33,14 @@ class LoginOTPRequestView(APIView):
             is_active=True,
         ).first()
 
-        if user is None:
-            raise ResourceNotFoundError(
-                "Account with the provided email does not exist."
-            )
-
-        LoginOTPService.create_challenge(user)
+        if user is not None:
+            # Do not send to an ambiguous address shared by multiple accounts.
+            if User.objects.filter(email__iexact=email, is_active=True).count() == 1:
+                LoginOTPService.create_challenge(user)
 
         return Response(
             {
-                "detail": (
-                    "An OTP has been sent to your registered email address."
-                )
+                "detail": "If an account exists for that email, a login code has been sent."
             },
             status=status.HTTP_200_OK,
         )
@@ -49,6 +48,8 @@ class LoginOTPRequestView(APIView):
 
 class LoginOTPVerifyView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "otp_verify"
 
     def post(self, request):
         serializer = LoginOTPVerifySerializer(data=request.data)
@@ -57,15 +58,11 @@ class LoginOTPVerifyView(APIView):
         email = serializer.validated_data["email"]
         otp = serializer.validated_data["otp"]
 
-        user = User.objects.filter(
-            email__iexact=email,
-            is_active=True,
-        ).first()
+        matching_users = User.objects.filter(email__iexact=email, is_active=True)
+        user = matching_users.first() if matching_users.count() == 1 else None
 
         if user is None:
-            raise APIValidationError({
-                "detail": "Invalid or expired login code."
-            })
+            raise APIValidationError({"detail": "Invalid or expired login code."})
 
         valid, message = LoginOTPService.verify_challenge(
             user=user,

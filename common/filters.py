@@ -12,7 +12,7 @@ class PollFilter(filters.FilterSet):
         choices=Poll.ResultVisibility.choices
     )
 
-    # Date/time filters use ISO 8601 query-parameter values.
+    # Date/time filters
     created_after = filters.IsoDateTimeFilter(
         field_name="created_at",
         lookup_expr="gte",

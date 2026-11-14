@@ -15,6 +15,9 @@ from decouple import config
 from datetime import timedelta
 from pathlib import Path
 from decouple import Config, RepositoryEnv
+from django.core.exceptions import ImproperlyConfigured
+import dj_database_url
+
 # import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -27,10 +30,18 @@ env_config = Config(RepositoryEnv(BASE_DIR / "secrets.env"))
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env_config("DJANGO_SECRET_KEY")
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = []
+# Environment-driven defaults are safe for local development and production.
+DEBUG = env_config("DJANGO_DEBUG", default=False, cast=bool)
+ALLOWED_HOSTS = env_config(
+    "DJANGO_ALLOWED_HOSTS",
+    default="localhost,127.0.0.1,testserver",
+    cast=lambda value: [host.strip() for host in value.split(",") if host.strip()],
+)
+CSRF_TRUSTED_ORIGINS = env_config(
+    "DJANGO_CSRF_TRUSTED_ORIGINS",
+    default="",
+    cast=lambda value: [origin.strip() for origin in value.split(",") if origin.strip()],
+)
 
 
 # Application definition
@@ -83,20 +94,24 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 
-ASGI_APPLICATION = 'config.asgi.application'
+ASGI_APPLICATION = 'core.asgi.application'
 
 
-# Database
-# https://docs.djangoproject.com/en/6.1/ref/settings/#databases
+# PostgreSQL Database Configuration
+
+DATABASE_URL = env_config("DATABASE_URL", default="")
+
+if not DATABASE_URL:
+    raise ImproperlyConfigured(
+        "DATABASE_URL is missing from secrets.env."
+    )
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    "default": dj_database_url.parse(
+        DATABASE_URL,
+        conn_max_age=600,
+    )
 }
-
-
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
 
@@ -131,7 +146,8 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 
 # Email
@@ -154,13 +170,18 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    "DEFAULT_THROTTLE_RATES": {
+        "otp_request": "3/minute",
+        "otp_verify": "5/minute",
+        "password_reset": "3/hour",
+    },
     "EXCEPTION_HANDLER": (
         "common.exceptions.handler.custom_exception_handler"
     ),
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=10),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=5),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
@@ -181,10 +202,22 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 # Password reset configuration
 PASSWORD_RESET_FRONTEND_URL = env_config("PASSWORD_RESET_FRONTEND_URL")
 PASSWORD_RESET_TIMEOUT = env_config("PASSWORD_RESET_TIMEOUT", cast=int)
+INVITATION_FRONTEND_URL = env_config(
+    "INVITATION_FRONTEND_URL",
+    default="http://localhost:3000/invitations/respond",
+)
 
 # Celery and Redis configuration
 CELERY_BROKER_URL = env_config("CELERY_BROKER_URL")
 CELERY_RESULT_BACKEND = env_config("CELERY_RESULT_BACKEND")
+
+# Check for expired in-progress polls every 30 seconds.
+CELERY_BEAT_SCHEDULE = {
+    "complete-expired-polls-every-59-seconds": {
+        "task": "polls.tasks.complete_expired_polls",
+        "schedule": 59.0,
+    },
+}
 
 # OTP Timeout Settings
 LOGIN_OTP_TTL_SECONDS = env_config(

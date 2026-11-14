@@ -1,10 +1,7 @@
 from rest_framework import serializers
 from auth.models.user import User
-# from .user_profile_serializer import UserProfileSerializer
-from django.contrib.auth import get_user_model
 
 class UserSerializer(serializers.ModelSerializer):
-    # profile = UserProfileSerializer(read_only=True)
 
     class Meta:
         model = User
@@ -20,4 +17,12 @@ class UserSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-        # auth/api/me - Protected and Read Only!
+# Mini-serializer
+class MiniUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = [
+            "first_name",
+            "last_name",
+        ]
+        read_only_fields = fields

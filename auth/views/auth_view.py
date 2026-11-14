@@ -1,6 +1,7 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
@@ -13,6 +14,13 @@ from ..services.user import UserService
 
 
 class AuthViewSet(viewsets.ViewSet):
+    def get_throttles(self):
+        if self.action == "reset_password":
+            throttle = ScopedRateThrottle()
+            throttle.scope = "password_reset"
+            return [throttle]
+        return super().get_throttles()
+
 
     @action(detail=False, methods=["post"], permission_classes=[AllowAny])
     def signup(self, request):
@@ -79,6 +87,8 @@ class AuthViewSet(viewsets.ViewSet):
 
         try:
             token = RefreshToken(refresh_token)
+            if token.get("token_type") != "refresh" or str(token.get("user_id")) != str(request.user.pk):
+                raise TokenError("Refresh token does not belong to the authenticated user.")
             token.blacklist()
         except TokenError as exc:
             raise APIValidationError({
