@@ -1,122 +1,198 @@
-## Updates – 30 October 2026
+# PollPoint – Full-Stack Polling Application
 
-### 1. Polls API – Filtering, Search, Ordering and Pagination
+A full-stack polling platform built with **Django REST Framework** and **Next.js**, featuring secure authentication, role-based access, poll management, voting and results.
 
-Implemented filtering, searching, ordering and pagination functionality for the Polls API using Django REST Framework and `django-filter`.
+## Tech Stack
 
-**Filtering**
-- Filter polls by status (`draft`, `in_progress`, `completed`).
-- Filter by result visibility (`live`, `after_submission`, `polls_end`, `restricted`).
-- Filter polls by creation, starting and ending dates/times.
-- Date filters support ISO 8601 date/time values.
+**Backend:** Python, Django, Django REST Framework  
+**Frontend:** Next.js, React, TypeScript, Tailwind CSS  
+**Database:** PostgreSQL  
+**Background Tasks:** Celery, Celery Beat  
+**Caching & Message Broker:** Redis  
+**Authentication:** JWT, OTP, HTTP-only cookies
 
-**Search**
-- Search polls by name.
-- Search polls by description.
-- Uses DRF's built-in `SearchFilter`.
+## Features
 
-**Ordering**
-- Order polls by name.
-- Order by creation date.
-- Order by starting date.
-- Order by ending date.
-- Supports ascending and descending ordering using the `-` prefix.
+- User registration, login and email OTP verification.
+- JWT authentication and password reset.
+- Admin and Client roles with permission-based access.
+- Poll creation and management.
+- Multiple questions and answer options per poll.
+- Draft, In Progress and Completed poll statuses.
+- Voting with duplicate-vote prevention.
+- Configurable result visibility.
+- Automatic completion of expired polls using Celery.
+- Search, filtering, ordering and pagination.
+- Next.js frontend integrated with Django APIs.
 
-**Pagination**
-- Implemented using DRF's built-in `PageNumberPagination`.
-- Default page size: 10 polls.
-- Supports custom page size using `page_size`.
-- Maximum allowed page size: 100.
-- Returns pagination metadata, including total count, current page, next page, previous page and total pages.
+## Project Structure
 
-### 2. Generic ViewSet Implementation
+```text
+Django_practice/
+├── auth/           # Authentication and user management
+├── polls/          # Polls, questions and voting
+├── common/         # Shared utilities
+├── core/           # Django configuration and Celery
+├── frontend/       # Next.js application
+├── manage.py
+├── secrets.env     # Local environment variables
+└── README.md
+```
 
-Updated `PollViewSet` to use DRF's `GenericViewSet` with:
-- `ListModelMixin` for retrieving all polls.
-- `RetrieveModelMixin` for retrieving an individual poll.
-- Existing custom `create()` action for creating polls.
+## Requirements
 
-Also configured:
-- `DjangoFilterBackend`
-- `SearchFilter`
-- `OrderingFilter`
-- `PollPagination`
+- Python
+- Node.js and npm
+- PostgreSQL
+- Redis
+- Git
 
-Used `select_related()` and `prefetch_related()` to efficiently retrieve related poll creators, questions and answer options.
+## Environment Configuration
 
-### 3. Common API Response Wrappers
+Create `secrets.env` in the project root.
 
-Created reusable success-response functions inside the `common/api/` directory.
+Configure the following variables with your own credentials:
 
-- `success_response()`: Provides a consistent success-response structure.
-- `paginated_success_response()`: Provides a consistent response structure with pagination metadata.
+```env
+DJANGO_DEBUG=True
+DJANGO_SECRET_KEY=your-secret-key
 
-These wrappers are currently connected to the Polls API.
+DATABASE_URL=postgresql://DB_USER:DB_PASSWORD@127.0.0.1:5433/pollpoint
 
-### 4. Files Created
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=your-email
+EMAIL_HOST_PASSWORD=your-app-password
 
-| File | Purpose |
+PASSWORD_RESET_FRONTEND_URL=http://localhost:3000/reset-password
+PASSWORD_RESET_TIMEOUT=3600
+
+CELERY_BROKER_URL=redis://127.0.0.1:6379/0
+CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/0
+
+LOGIN_OTP_TTL_SECONDS=180
+LOGIN_OTP_MAX_ATTEMPTS=5
+
+REDIS_BACKEND=django_redis.cache.RedisCache
+REDIS_URL=redis://127.0.0.1:6379/1
+REDIS_CLIENT_CLASS=django_redis.client.DefaultClient
+```
+
+Never commit `secrets.env` or credentials to GitHub.
+
+## Installation
+
+### Backend
+
+From the project root:
+
+```bash
+./.venv/bin/python manage.py migrate
+./.venv/bin/python manage.py createsuperuser
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+```
+
+## Running the Application
+
+Start the application using four separate terminals.
+
+**Terminal 1 – PostgreSQL, Redis and Django**
+
+```bash
+cd "/run/media/dilshair-zafar/0616A74316A7331B/Practice/Django_practice"
+
+sudo systemctl start postgresql
+sudo systemctl start redis-server
+
+pg_isready -h 127.0.0.1 -p 5433
+redis-cli ping
+
+./.venv/bin/python manage.py runserver
+```
+
+**Terminal 2 – Celery Worker**
+
+```bash
+cd "/run/media/dilshair-zafar/0616A74316A7331B/Practice/Django_practice"
+
+./.venv/bin/celery -A core worker --loglevel=info
+```
+
+**Terminal 3 – Celery Beat**
+
+```bash
+cd "/run/media/dilshair-zafar/0616A74316A7331B/Practice/Django_practice"
+
+./.venv/bin/celery -A core beat \
+    --loglevel=info \
+    --schedule=/tmp/pollpoint-celerybeat-schedule
+```
+
+**Terminal 4 – Next.js Frontend**
+
+```bash
+cd "/run/media/dilshair-zafar/0616A74316A7331B/Practice/Django_practice/frontend"
+
+npm run dev
+```
+
+Keep all four terminals running while using the application. Only one Celery Beat instance should run at a time.
+
+## Application URLs
+
+| Service | URL |
 |---|---|
-| `common/api/__init__.py` | Exports common API response functions. |
-| `common/api/responses.py` | Contains reusable success and paginated response wrappers. |
-| `polls/filters.py` | Defines Poll-specific filtering parameters. |
-| `polls/pagination.py` | Configures Poll pagination using DRF's built-in pagination class. |
+| Frontend | http://localhost:3000 |
+| Django Backend | http://127.0.0.1:8000 |
+| Django Admin | http://127.0.0.1:8000/admin |
+| PostgreSQL | 127.0.0.1:5433 |
+| Redis | 127.0.0.1:6379 |
 
-### 5. Files Updated
+## Useful Commands
 
-| File | Changes |
-|---|---|
-| `core/settings.py` | Corrected `django-filters` to `django_filters` in `INSTALLED_APPS`. |
-| `polls/views/poll.py` | Integrated GenericViewSet, filtering, search, ordering, pagination and common response wrappers. |
+**Django checks**
 
-### 6. Available API Endpoints
+```bash
+./.venv/bin/python manage.py check
+```
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| POST | `/api/polls/` | Create a poll. |
-| GET | `/api/polls/` | Retrieve and paginate polls. |
-| GET | `/api/polls/<id>/` | Retrieve a specific poll. |
+**Database migrations**
 
-### 7. Available Query Parameters
+```bash
+./.venv/bin/python manage.py makemigrations
+./.venv/bin/python manage.py migrate
+```
 
-| Parameter | Purpose |
-|---|---|
-| `status` | Filter by poll status. |
-| `result_visibility` | Filter by result visibility. |
-| `created_after` | Filter by creation date (greater than or equal to). |
-| `created_before` | Filter by creation date (less than or equal to). |
-| `starts_after` | Filter by starting date (greater than or equal to). |
-| `starts_before` | Filter by starting date (less than or equal to). |
-| `ends_after` | Filter by ending date (greater than or equal to). |
-| `ends_before` | Filter by ending date (less than or equal to). |
-| `search` | Search poll names and descriptions. |
-| `ordering` | Sort polls by supported fields. |
-| `page` | Select the page number. |
-| `page_size` | Specify the number of polls per page. |
+**Frontend validation**
 
-**Example request:**
+```bash
+cd frontend
+npx tsc --noEmit
+npm run lint
+npm run build
+```
 
-`GET /api/polls/?status=in_progress&result_visibility=live&search=election&ordering=-created_at&page=1&page_size=5`
+## Git Workflow
 
-### 8. Testing and Verification
+The project uses a single repository for both backend and frontend.
 
-The following checks were successfully performed:
+```bash
+git switch -c feature/your-feature-name
+git add .
+git commit -m "Describe your changes"
+git push -u origin feature/your-feature-name
+```
 
-- Django system check: Passed.
-- Python compilation: Passed.
-- Migration check: No changes detected.
-- Poll list endpoint: HTTP 200.
-- Poll detail endpoint: HTTP 200.
-- Status and visibility filtering: Verified.
-- Combined filtering, search and ordering: Verified.
-- Pagination and custom page size: Verified.
-- Invalid filter values: Correctly returned HTTP 400.
-- Date/time filter validation: Passed.
+Create a Pull Request on GitHub to merge changes into `main`.
 
-No database model changes or migrations were required.
+---
 
-### 9. Current Scope
-
-The work completed in this update focuses on Poll creation and retrieval, filtering, searching, ordering and pagination.
-
-No files inside the `auth/` application were modified.
+**PollPoint – Secure Authentication. Smart Poll Management. Reliable Voting.**
