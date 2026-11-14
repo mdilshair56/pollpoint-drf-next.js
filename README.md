@@ -80,8 +80,6 @@ REDIS_URL=redis://127.0.0.1:6379/1
 REDIS_CLIENT_CLASS=django_redis.client.DefaultClient
 ```
 
-Never commit `secrets.env` or credentials to GitHub.
-
 ## Installation
 
 ### Backend
