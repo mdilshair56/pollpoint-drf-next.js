@@ -1,26 +1,27 @@
-from rest_framework import filters as drf_filters
-from rest_framework import mixins, status, viewsets
-from rest_framework.permissions import IsAuthenticated
-
+from django.db.models import Prefetch, Q
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
-
+from rest_framework import filters as drf_filters, status, viewsets
+from rest_framework.decorators import action
 from common.api.responses import success_response
-from polls.filters import PollFilter
-from polls.models import Poll
-from polls.pagination import PollPagination
-from polls.serializers.poll_serializer import PollDetailSerializer
+from common.exceptions import APIValidationError, ConflictError
+from common.filters import PollFilter
+from common.pagination import PollPagination
+from polls.models import AnswerOption, Poll, PollQuestion, Question
+from polls.permissions import PollObjectPermission, is_admin
+from polls.serializers.poll_serializer import (
+    PollDetailSerializer,
+    PollExtendSerializer,
+    PollListSerializer,
+)
 from polls.services.poll import PollServices
 
 
-class PollViewSet(
-    mixins.ListModelMixin,
-    mixins.RetrieveModelMixin,
-    viewsets.GenericViewSet,
-):
-    permission_classes = [IsAuthenticated]
+class PollViewSet(viewsets.ModelViewSet):
+    permission_classes = [PollObjectPermission]
     serializer_class = PollDetailSerializer
+    pagination_class = PollPagination
 
-    # Apply structured filters, text search, and client-selected ordering.
     filter_backends = [
         DjangoFilterBackend,
         drf_filters.SearchFilter,
@@ -28,57 +29,197 @@ class PollViewSet(
     ]
     filterset_class = PollFilter
     search_fields = ["name", "description"]
-    ordering_fields = [
-        "name",
-        "created_at",
-        "starts_at",
-        "ends_at",
-    ]
+    ordering_fields = ["name", "created_at", "starts_at", "ends_at"]
     ordering = ["-created_at"]
 
-    # Paginate only the Poll list endpoint.
-    pagination_class = PollPagination
+    def get_serializer_class(self):
+        if self.action == "list":
+            return PollListSerializer
+        return PollDetailSerializer
 
     def get_queryset(self):
-        # Load related creator, questions, and options efficiently.
-        return (
-            Poll.objects
-            .select_related("created_by")
-            .prefetch_related(
-                "poll_questions__question__answer_options"
+        user = self.request.user
+        if is_admin(user):
+            queryset = Poll.objects.all()
+        else:
+            queryset = Poll.objects.filter(
+                Q(created_by=user)
+                | Q(status__in=[Poll.Status.IN_PROGRESS, Poll.Status.COMPLETED])
             )
-        )
 
-    def create(self, request):
-        created_poll = PollServices.mega_poll(
-            poll_data=request.data,
-            user=request.user,
-        )
+        queryset = queryset.select_related("created_by")
+        if self.action in {"retrieve", "detailed_list", "update", "partial_update", "publish"}:
+            poll_questions = (
+                PollQuestion.objects
+                .select_related("question")
+                .prefetch_related(
+                    Prefetch(
+                        "question__answer_options",
+                        queryset=AnswerOption.objects.order_by("order", "id"),
+                    )
+                )
+                .order_by("order", "id")
+            )
+            queryset = queryset.prefetch_related(
+                Prefetch("poll_questions", queryset=poll_questions)
+            )
+        return queryset
 
-        poll_data = {
-            "id": created_poll.pk,
-            "name": created_poll.name,
-            "description": created_poll.description,
-            "status": created_poll.status,
-            "result_visibility": created_poll.result_visibility,
-            "questions": getattr(
-                created_poll,
-                "questions_data",
-                [],
-            ),
-        }
-
+    def create(self, request, *args, **kwargs):
+        if not isinstance(request.data, dict):
+            raise APIValidationError({
+                "detail": "Expected a JSON object containing poll details."
+            })
+        poll = PollServices.mega_poll(request.data, user=request.user)
         return success_response(
-            data=poll_data,
-            message="Poll created successfully.",
+            data={
+                "id": poll.pk,
+                "name": poll.name,
+                "description": poll.description,
+                "status": poll.status,
+                "result_visibility": poll.result_visibility,
+                "starts_at": poll.starts_at,
+                "ends_at": poll.ends_at,
+                "questions": poll.questions_data,
+            },
+            message="Draft poll created successfully. Publish it when ready.",
             status_code=status.HTTP_201_CREATED,
         )
 
     def retrieve(self, request, *args, **kwargs):
         poll = self.get_object()
-        serializer = self.get_serializer(poll)
+        return success_response(
+            data=self.get_serializer(poll).data,
+            message="Poll retrieved successfully.",
+        )
 
+    def _update_draft(self, request, *, partial):
+        poll = self.get_object()
+        # Validate supplied dates through DRF's DateTimeFields as well as the service.
+        validator = PollDetailSerializer(instance=poll, data=request.data, partial=True)
+        validator.is_valid(raise_exception=True)
+        updated = PollServices.update_poll(
+            poll=poll,
+            poll_data=request.data,
+            user=request.user,
+        )
+        updated = self.get_queryset().get(pk=updated.pk)
+        return success_response(
+            data=PollDetailSerializer(
+                updated,
+                context=self.get_serializer_context(),
+            ).data,
+            message="Poll updated successfully.",
+        )
+
+    def update(self, request, *args, **kwargs):
+        return self._update_draft(request, partial=False)
+
+    def partial_update(self, request, *args, **kwargs):
+        return self._update_draft(request, partial=True)
+
+    @action(detail=True, methods=["post"], url_path="publish")
+    def publish(self, request, pk=None):
+        poll = self.get_object()
+
+        is_superadmin = (
+            request.user.is_superuser
+            or getattr(request.user, "role", None) == "superadmin"
+        )
+        if poll.created_by_id != request.user.pk and not is_superadmin:
+            raise ConflictError("Only the poll owner or Superadmin can publish this draft.")
+
+        if poll.status != Poll.Status.DRAFT:
+            raise ConflictError("Only draft polls can be published.")
+        if poll.ends_at <= timezone.now():
+            raise APIValidationError({
+                "ends_at": "A poll cannot be published after its end time."
+            })
+        if poll.starts_at >= poll.ends_at:
+            raise APIValidationError({
+                "ends_at": "End time must be after start time."
+            })
+        poll_questions = poll.poll_questions.prefetch_related(
+            "question__answer_options"
+        )
+        if not poll_questions.exists():
+            raise APIValidationError({
+                "questions": "Add at least one question before publishing."
+            })
+        for poll_question in poll_questions:
+            if len(poll_question.question.answer_options.all()) < 2:
+                raise APIValidationError({
+                    "questions": (
+                        f"Question '{poll_question.question.name}' must have "
+                        "at least two answer options before publishing."
+                    )
+                })
+
+        poll.status = Poll.Status.IN_PROGRESS
+        poll.save(update_fields=["status", "updated_at"])
+        return success_response(
+            data=PollDetailSerializer(
+                self.get_queryset().get(pk=poll.pk),
+                context=self.get_serializer_context(),
+            ).data,
+            message="Poll published successfully.",
+        )
+
+    @action(detail=True, methods=["post"], url_path="close")
+    def close(self, request, pk=None):
+        poll = self.get_object()
+        closed_poll = PollServices.close_poll(poll=poll)
+        return success_response(
+            data=PollDetailSerializer(
+                self.get_queryset().get(pk=closed_poll.pk),
+                context=self.get_serializer_context(),
+            ).data,
+            message="Poll closed successfully. Voting is no longer accepted.",
+        )
+
+    @action(detail=True, methods=["post"], url_path="extend")
+    def extend(self, request, pk=None):
+        poll = self.get_object()
+        serializer = PollExtendSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        extended_poll = PollServices.extend_poll(
+            poll=poll,
+            new_ends_at=serializer.validated_data["ends_at"],
+        )
+        return success_response(
+            data=PollDetailSerializer(
+                self.get_queryset().get(pk=extended_poll.pk),
+                context=self.get_serializer_context(),
+            ).data,
+            message="Poll end date extended successfully.",
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        poll = self.get_object()
+        poll_name = poll.name
+        question_ids = list(
+            PollQuestion.objects.filter(poll=poll).values_list("question_id", flat=True)
+        )
+        poll.delete()
+        # Remove question/option rows that are no longer linked to any poll.
+        Question.objects.filter(
+            pk__in=question_ids,
+            poll_questions__isnull=True,
+        ).delete()
+        return success_response(
+            data={"id": int(kwargs["pk"]), "name": poll_name},
+            message="Poll deleted successfully.",
+            status_code=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["get"], url_path="details")
+    def detailed_list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        serializer = self.get_serializer(page if page is not None else queryset, many=True)
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
         return success_response(
             data=serializer.data,
-            message="Poll retrieved successfully.",
+            message="All poll details retrieved successfully.",
         )

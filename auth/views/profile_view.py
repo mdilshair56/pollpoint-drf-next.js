@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from auth.models.user_profile import UserProfile
 from ..serializers import UserSerializer
 from ..serializers.user_profile_serializer import UserProfileSerializer
-from ..services.user import IsAdminOrReadOnlyClient, UserService
+from ..services.user import IsAdminRole, UserService
 
 User = get_user_model()
 
@@ -22,7 +22,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = User.objects.all().order_by("-date_joined")
     serializer_class = UserSerializer
-    permission_classes = [IsAdminOrReadOnlyClient]
+    permission_classes = [IsAdminRole]
 
     @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
     def me(self, request):
@@ -41,7 +41,7 @@ class ProfileViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = UserProfile.objects.all()
     serializer_class = UserProfileSerializer
-    permission_classes = [IsAdminOrReadOnlyClient]
+    permission_classes = [IsAdminRole]
 
     @action(
         detail=False,

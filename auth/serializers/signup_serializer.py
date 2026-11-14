@@ -6,29 +6,21 @@ from ..services.user import UserService
 
 
 class SignupSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(
-        write_only=True,
-        min_length=8,
-        trim_whitespace=False,
-    )
-
+    password = serializers.CharField(write_only=True, min_length=8, trim_whitespace=False)
     profile = UserProfileSerializer(required=False)
 
     class Meta:
         model = User
         fields = [
-            "id",
-            "username",
-            "first_name",
-            "last_name",
-            "email",
-            "phone_number",
-            "role",
-            "is_superuser",
-            "password",
-            "profile",
+            "id", "username", "first_name", "last_name",
+            "email", "phone_number", "password", "profile",
         ]
-        read_only_fields = ["id", "is_superuser",]
+        read_only_fields = ["id"]
+
+    def validate_email(self, value):
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("An account with this email already exists.")
+        return value
 
     def validate_password(self, value):
         return UserService.validate_user_password(password=value)
