@@ -32,6 +32,15 @@ class NormalizedPollPayload(TypedDict, total=False):
 
 class PollServices:
     @staticmethod
+    def can_manage_poll(*, poll, user):
+        if not user or not user.is_authenticated:
+            return False
+
+        is_superadmin = user.is_superuser or user.role == "superadmin"
+        is_owner = poll.created_by_id == user.pk
+        return poll.status == Poll.Status.DRAFT and (is_superadmin or is_owner)
+
+    @staticmethod
     def _parse_datetime(value, field, fallback):
         if value in (None, ""):
             return fallback
@@ -315,6 +324,44 @@ class PollServices:
         raise ConflictError(
             "In-progress polls are read-only and cannot be extended."
         )
+
+    @staticmethod
+    def validate_can_publish(*, poll: Poll, user) -> None:
+        is_superadmin = (
+            user.is_superuser
+            or getattr(user, "role", None) == "superadmin"
+        )
+        if poll.created_by_id != user.pk and not is_superadmin:
+            raise ConflictError(
+                "Only the poll owner or Superadmin can publish this draft."
+            )
+
+        if poll.status != Poll.Status.DRAFT:
+            raise ConflictError("Only draft polls can be published.")
+        if poll.ends_at <= timezone.now():
+            raise APIValidationError({
+                "ends_at": "A poll cannot be published after its end time."
+            })
+        if poll.starts_at >= poll.ends_at:
+            raise APIValidationError({
+                "ends_at": "End time must be after start time."
+            })
+
+        poll_questions = poll.poll_questions.prefetch_related(
+            "question__answer_options"
+        )
+        if not poll_questions.exists():
+            raise APIValidationError({
+                "questions": "Add at least one question before publishing."
+            })
+        for poll_question in poll_questions:
+            if len(poll_question.question.answer_options.all()) < 2:
+                raise APIValidationError({
+                    "questions": (
+                        f"Question '{poll_question.question.name}' must have "
+                        "at least two answer options before publishing."
+                    )
+                })
 
     @staticmethod
     @transaction.atomic

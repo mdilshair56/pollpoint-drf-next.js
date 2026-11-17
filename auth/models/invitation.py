@@ -4,7 +4,6 @@ from django.conf import settings
 from django.db import models
 from django.db.models import Q
 from django.db.models.functions import Lower
-from django.utils import timezone
 
 
 class AdminInvitation(models.Model):
@@ -25,6 +24,7 @@ class AdminInvitation(models.Model):
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
     expires_at = models.DateTimeField(db_index=True)
     responded_at = models.DateTimeField(null=True, blank=True)
+
     accepted_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -49,11 +49,11 @@ class AdminInvitation(models.Model):
             ),
         ]
 
-    def refresh_expired_status(self):
-        if self.status == self.Status.PENDING and self.expires_at <= timezone.now():
-            self.status = self.Status.EXPIRED
-            self.save(update_fields=["status", "updated_at"])
-        return self.status
+    # def refresh_expired_status(self):
+    #     if self.status == self.Status.PENDING and self.expires_at <= timezone.now():
+    #         self.status = self.Status.EXPIRED
+    #         self.save(update_fields=["status", "updated_at"])
+    #     return self.status
 
     def __str__(self):
         return f"Invitation to {self.email} ({self.status})"

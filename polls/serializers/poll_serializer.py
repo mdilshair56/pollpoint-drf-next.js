@@ -2,6 +2,19 @@ from rest_framework import serializers
 
 from auth.serializers.user_serializer import MiniUserSerializer
 from polls.models import AnswerOption, Poll, PollQuestion, Vote
+from polls.services.poll import PollServices
+
+
+class CanManagePollMixin(serializers.ModelSerializer):
+    can_manage = serializers.SerializerMethodField()
+
+    def get_can_manage(self, obj):
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        return PollServices.can_manage_poll(
+            poll=obj,
+            user=user,
+        )
 
 
 class AnswerOptionSerializer(serializers.ModelSerializer):
@@ -56,26 +69,13 @@ class PollQuestionSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class PollDetailSerializer(serializers.ModelSerializer):
+class PollDetailSerializer(CanManagePollMixin):
     questions = PollQuestionSerializer(
         source="poll_questions",
         many=True,
         read_only=True,
     )
     created_by = MiniUserSerializer(read_only=True)
-    can_manage = serializers.SerializerMethodField()
-
-    def get_can_manage(self, obj):
-        request = self.context.get("request")
-        if request is None or not request.user.is_authenticated:
-            return False
-        is_superadmin = (
-            request.user.is_superuser
-            or request.user.role == "superadmin"
-        )
-        is_owner = obj.created_by_id == request.user.pk
-        return obj.status == Poll.Status.DRAFT and (is_superadmin or is_owner)
-
     # Keep ISO-8601 representations so clients can safely edit and resubmit dates.
     starts_at = serializers.DateTimeField(required=False)
     ends_at = serializers.DateTimeField(required=False)
@@ -112,20 +112,8 @@ class PollDetailSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class PollListSerializer(serializers.ModelSerializer):
+class PollListSerializer(CanManagePollMixin):
     created_by = MiniUserSerializer(read_only=True)
-    can_manage = serializers.SerializerMethodField()
-
-    def get_can_manage(self, obj):
-        request = self.context.get("request")
-        if request is None or not request.user.is_authenticated:
-            return False
-        is_superadmin = (
-            request.user.is_superuser
-            or request.user.role == "superadmin"
-        )
-        is_owner = obj.created_by_id == request.user.pk
-        return obj.status == Poll.Status.DRAFT and (is_superadmin or is_owner)
 
     class Meta:
         model = Poll

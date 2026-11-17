@@ -1,10 +1,9 @@
 from django.db.models import Prefetch, Q
-from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters as drf_filters, status, viewsets
 from rest_framework.decorators import action
 from common.api.responses import success_response
-from common.exceptions import APIValidationError, ConflictError
+from common.exceptions import APIValidationError
 from common.filters import PollFilter
 from common.pagination import PollPagination
 from polls.models import AnswerOption, Poll, PollQuestion, Question
@@ -121,39 +120,7 @@ class PollViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="publish")
     def publish(self, request, pk=None):
         poll = self.get_object()
-
-        is_superadmin = (
-            request.user.is_superuser
-            or getattr(request.user, "role", None) == "superadmin"
-        )
-        if poll.created_by_id != request.user.pk and not is_superadmin:
-            raise ConflictError("Only the poll owner or Superadmin can publish this draft.")
-
-        if poll.status != Poll.Status.DRAFT:
-            raise ConflictError("Only draft polls can be published.")
-        if poll.ends_at <= timezone.now():
-            raise APIValidationError({
-                "ends_at": "A poll cannot be published after its end time."
-            })
-        if poll.starts_at >= poll.ends_at:
-            raise APIValidationError({
-                "ends_at": "End time must be after start time."
-            })
-        poll_questions = poll.poll_questions.prefetch_related(
-            "question__answer_options"
-        )
-        if not poll_questions.exists():
-            raise APIValidationError({
-                "questions": "Add at least one question before publishing."
-            })
-        for poll_question in poll_questions:
-            if len(poll_question.question.answer_options.all()) < 2:
-                raise APIValidationError({
-                    "questions": (
-                        f"Question '{poll_question.question.name}' must have "
-                        "at least two answer options before publishing."
-                    )
-                })
+        PollServices.validate_can_publish(poll=poll, user=request.user)
 
         poll.status = Poll.Status.IN_PROGRESS
         poll.save(update_fields=["status", "updated_at"])

@@ -1,9 +1,43 @@
+from django.db import transaction
 
+from common.exceptions import APIValidationError
 from polls.models import AnswerOption
+from polls.models.poll_question import PollQuestion
+from polls.models.question import Question
 from common.utils.constraints import get_unique_constraint_fields
 
 
 class AnswerOptionServices:
+
+    @staticmethod
+    @transaction.atomic
+    def add_question_to_poll(*, poll, user, question_name, order, options):
+        if len(options) < 2:
+            raise APIValidationError({
+                "options": "At least two answer options are required."
+            })
+
+        question = Question.objects.create(
+            name=question_name,
+            created_by=user,
+        )
+        options_payload = [
+            {
+                "question_id": question.pk,
+                "name": option["name"],
+                "order": option["order"],
+            }
+            for option in options
+        ]
+        AnswerOptionServices.bulk_create_options(
+            options_payload=options_payload
+        )
+        PollQuestion.objects.create(
+            poll=poll,
+            question=question,
+            order=order,
+        )
+        return question
 
     @staticmethod
     def bulk_create_options(options_payload=None):

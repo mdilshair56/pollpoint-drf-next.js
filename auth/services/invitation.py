@@ -26,8 +26,35 @@ def _is_admin(user):
     )
 
 
+# class InvitationService:
+#     TTL = timedelta(hours=24)
+
 class InvitationService:
     TTL = timedelta(hours=24)
+
+    @staticmethod
+    def _expire_pending_invitations(*, queryset):
+        now = timezone.now()
+
+        return queryset.filter(
+            status=AdminInvitation.Status.PENDING,
+            expires_at__lte=now,
+        ).update(
+            status=AdminInvitation.Status.EXPIRED,
+            updated_at=now,
+        )
+
+    @staticmethod
+    def refresh_expired_status(*, invitation):
+        InvitationService._expire_pending_invitations(
+            queryset=AdminInvitation.objects.filter(pk=invitation.pk)
+        )
+
+        invitation.refresh_from_db(
+            fields=["status", "updated_at"]
+        )
+
+        return invitation.status
 
     @staticmethod
     @transaction.atomic

@@ -18,9 +18,7 @@ class SignupSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
     def validate_email(self, value):
-        if User.objects.filter(email__iexact=value).exists():
-            raise serializers.ValidationError("An account with this email already exists.")
-        return value
+        return UserService.validate_signup_email(email=value)
 
     def validate_password(self, value):
         return UserService.validate_user_password(password=value)

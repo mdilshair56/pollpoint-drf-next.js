@@ -12,14 +12,10 @@ from auth.models.user import User
 from auth.models.user_profile import UserProfile
 
 from auth.tasks import send_password_reset_email_task
-import hashlib
-import secrets
 
-from django.core.cache import cache
 
 
 from django.conf import settings
-from auth.tasks import send_login_otp_email_task
 
 UserModel = get_user_model()
 
@@ -35,6 +31,16 @@ class UserService:
             raise APIValidationError(exc.messages)
         return password
 
+    @staticmethod
+    def validate_signup_email(*, email):
+        email = email.strip()
+
+        if User.objects.filter(email__iexact=email).exists():
+            raise APIValidationError({
+                "email": "An account with this email already exists."
+            })
+
+        return email
 
     # 2. signup_view.py
     @staticmethod
@@ -227,59 +233,3 @@ class IsAdminOrReadOnlyClient(BasePermission):
         if request.user.is_superuser or request.user.role in (User.Role.ADMIN, User.Role.SUPERADMIN):
             return True
         return request.method in SAFE_METHODS
-
-
-# Login_otp. py
-
-class LoginOTPService:
-
-    @staticmethod
-    def create_challenge(user):
-        otp = f"{secrets.randbelow(1_000_000):06d}"
-
-        otp_hash = hashlib.sha256(otp.encode()).hexdigest()
-
-        cache.set(
-            f"login_otp:{user.pk}",
-            {"otp_hash": otp_hash},
-            timeout=settings.LOGIN_OTP_TTL_SECONDS,
-        )
-        cache.delete(f"login_otp_attempts:{user.pk}")
-        send_login_otp_email_task.delay(user.email, otp)
-
-    @staticmethod
-    def verify_challenge(user, submitted_otp):
-        key = f"login_otp:{user.pk}"
-        attempts_key = f"login_otp_attempts:{user.pk}"
-        lock_key = f"login_otp_verify_lock:{user.pk}"
-
-        # cache.add + incr uses Redis atomic operations; the short lock also
-        # prevents two simultaneous successful submissions from reusing one OTP.
-        if not cache.add(lock_key, secrets.token_urlsafe(16), timeout=10):
-            return False, "Verification is already in progress. Try again."
-
-        try:
-            challenge = cache.get(key)
-            if challenge is None:
-                return False, "Invalid or expired login code."
-
-            cache.add(attempts_key, 0, timeout=settings.LOGIN_OTP_TTL_SECONDS)
-            try:
-                attempts = cache.incr(attempts_key)
-            except ValueError:
-                cache.add(attempts_key, 1, timeout=settings.LOGIN_OTP_TTL_SECONDS)
-                attempts = 1
-
-            if attempts > settings.LOGIN_OTP_MAX_ATTEMPTS:
-                cache.delete(key)
-                return False, "Invalid or expired login code."
-
-            submitted_hash = hashlib.sha256(submitted_otp.encode()).hexdigest()
-            if not secrets.compare_digest(submitted_hash, challenge["otp_hash"]):
-                return False, "Invalid or expired login code."
-
-            cache.delete(key)
-            cache.delete(attempts_key)
-            return True, "OTP verified successfully."
-        finally:
-            cache.delete(lock_key)

@@ -1,19 +1,14 @@
-from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_simplejwt.tokens import RefreshToken
 
-from common.exceptions import APIValidationError
 from auth.serializers.login_otp_serializer import (
     LoginOTPRequestSerializer,
     LoginOTPVerifySerializer,
 )
-from auth.services.user import LoginOTPService
-
-User = get_user_model()
+from auth.services.login_otp import LoginOTPService
 
 
 class LoginOTPRequestView(APIView):
@@ -27,16 +22,7 @@ class LoginOTPRequestView(APIView):
 
         email = serializer.validated_data["email"]
 
-        # Find the active account before creating an OTP challenge.
-        user = User.objects.filter(
-            email__iexact=email,
-            is_active=True,
-        ).first()
-
-        if user is not None:
-            # Do not send to an ambiguous address shared by multiple accounts.
-            if User.objects.filter(email__iexact=email, is_active=True).count() == 1:
-                LoginOTPService.create_challenge(user)
+        LoginOTPService.request_login_code(email=email)
 
         return Response(
             {
@@ -56,32 +42,16 @@ class LoginOTPVerifyView(APIView):
         serializer.is_valid(raise_exception=True)
 
         email = serializer.validated_data["email"]
-        otp = serializer.validated_data["otp"]
-
-        matching_users = User.objects.filter(email__iexact=email, is_active=True)
-        user = matching_users.first() if matching_users.count() == 1 else None
-
-        if user is None:
-            raise APIValidationError({"detail": "Invalid or expired login code."})
-
-        valid, message = LoginOTPService.verify_challenge(
-            user=user,
-            submitted_otp=otp,
+        tokens = LoginOTPService.verify_login_code(
+            email=email,
+            submitted_otp=serializer.validated_data["otp"],
         )
-
-        if not valid:
-            raise APIValidationError({
-                "detail": message,
-            })
-
-        # Issue JWT tokens only after successful OTP verification.
-        refresh = RefreshToken.for_user(user)
 
         return Response(
             {
                 "detail": "Login successful.",
-                "refresh": str(refresh),
-                "access": str(refresh.access_token),
+                "refresh": tokens["refresh"],
+                "access": tokens["access"],
             },
             status=status.HTTP_200_OK,
         )
