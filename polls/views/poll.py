@@ -11,7 +11,6 @@ from polls.models import AnswerOption, Poll, PollQuestion, Question
 from polls.permissions import PollObjectPermission, is_admin
 from polls.serializers.poll_serializer import (
     PollDetailSerializer,
-    PollExtendSerializer,
     PollListSerializer,
 )
 from polls.services.poll import PollServices
@@ -44,7 +43,8 @@ class PollViewSet(viewsets.ModelViewSet):
         else:
             queryset = Poll.objects.filter(
                 Q(created_by=user)
-                | Q(status__in=[Poll.Status.IN_PROGRESS, Poll.Status.COMPLETED])
+                | Q(status__in=[Poll.Status.IN_PROGRESS,
+                                Poll.Status.COMPLETED])
             )
 
         queryset = queryset.select_related("created_by")
@@ -96,7 +96,7 @@ class PollViewSet(viewsets.ModelViewSet):
     def _update_draft(self, request, *, partial):
         poll = self.get_object()
         # Validate supplied dates through DRF's DateTimeFields as well as the service.
-        validator = PollDetailSerializer(instance=poll, data=request.data, partial=True)
+        validator = PollDetailSerializer(instance=poll, data=request.data, partial=partial)
         validator.is_valid(raise_exception=True)
         updated = PollServices.update_poll(
             poll=poll,
@@ -112,10 +112,10 @@ class PollViewSet(viewsets.ModelViewSet):
             message="Poll updated successfully.",
         )
 
-    def update(self, request, *args, **kwargs):
+    def update(self, request, *args, **kwargs): #PUT
         return self._update_draft(request, partial=False)
 
-    def partial_update(self, request, *args, **kwargs):
+    def partial_update(self, request, *args, **kwargs): #PATCH
         return self._update_draft(request, partial=True)
 
     @action(detail=True, methods=["post"], url_path="publish")
@@ -157,6 +157,7 @@ class PollViewSet(viewsets.ModelViewSet):
 
         poll.status = Poll.Status.IN_PROGRESS
         poll.save(update_fields=["status", "updated_at"])
+
         return success_response(
             data=PollDetailSerializer(
                 self.get_queryset().get(pk=poll.pk),
@@ -177,22 +178,22 @@ class PollViewSet(viewsets.ModelViewSet):
             message="Poll closed successfully. Voting is no longer accepted.",
         )
 
-    @action(detail=True, methods=["post"], url_path="extend")
-    def extend(self, request, pk=None):
-        poll = self.get_object()
-        serializer = PollExtendSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        extended_poll = PollServices.extend_poll(
-            poll=poll,
-            new_ends_at=serializer.validated_data["ends_at"],
-        )
-        return success_response(
-            data=PollDetailSerializer(
-                self.get_queryset().get(pk=extended_poll.pk),
-                context=self.get_serializer_context(),
-            ).data,
-            message="Poll end date extended successfully.",
-        )
+    # @action(detail=True, methods=["post"], url_path="extend")
+    # def extend(self, request, pk=None):
+    #     poll = self.get_object()
+    #     serializer = PollExtendSerializer(data=request.data)
+    #     serializer.is_valid(raise_exception=True)
+    #     extended_poll = PollServices.extend_poll(
+    #         poll=poll,
+    #         new_ends_at=serializer.validated_data["ends_at"],
+    #     )
+    #     return success_response(
+    #         data=PollDetailSerializer(
+    #             self.get_queryset().get(pk=extended_poll.pk),
+    #             context=self.get_serializer_context(),
+    #         ).data,
+    #         message="Poll end date extended successfully.",
+    #     )
 
     def destroy(self, request, *args, **kwargs):
         poll = self.get_object()
@@ -212,14 +213,14 @@ class PollViewSet(viewsets.ModelViewSet):
             status_code=status.HTTP_200_OK,
         )
 
-    @action(detail=False, methods=["get"], url_path="details")
-    def detailed_list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
-        page = self.paginate_queryset(queryset)
-        serializer = self.get_serializer(page if page is not None else queryset, many=True)
-        if page is not None:
-            return self.get_paginated_response(serializer.data)
-        return success_response(
-            data=serializer.data,
-            message="All poll details retrieved successfully.",
-        )
+    # @action(detail=False, methods=["get"], url_path="details")
+    # def detailed_list(self, request, *args, **kwargs):
+    #     queryset = self.filter_queryset(self.get_queryset())
+    #     page = self.paginate_queryset(queryset)
+    #     serializer = self.get_serializer(page if page is not None else queryset, many=True)
+    #     if page is not None:
+    #         return self.get_paginated_response(serializer.data)
+    #     return success_response(
+    #         data=serializer.data,
+    #         message="All poll details retrieved successfully.",
+    #     )
