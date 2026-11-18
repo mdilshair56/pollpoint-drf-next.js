@@ -41,9 +41,10 @@ export class PollService {
     );
   }
 
-  publish(id: number) {
-    return apiClient.post<ApiEnvelope<PollDetail>>(
-      "/api/backend/polls/" + id + "/publish/",
+  publishDraft(id: number) {
+    return apiClient.patch<ApiEnvelope<PollDetail>>(
+      "/api/backend/polls/" + id + "/",
+      { status: "in_progress" },
     );
   }
 

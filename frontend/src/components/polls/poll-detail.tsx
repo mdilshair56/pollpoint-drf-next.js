@@ -88,7 +88,8 @@ export function PollDetailView({ pollId }: { pollId: number }) {
     setError("");
     setMessage("");
     try {
-      const result = await pollService.publish(poll.id);
+      // const result = await pollService.publish(poll.id);
+      const result = await pollService.publishDraft(poll.id);
       setPoll(result.data);
       setMessage(result.message ?? "Poll published successfully.");
     } catch (caught) {

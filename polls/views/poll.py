@@ -1,4 +1,3 @@
-from django.db.models import Prefetch, Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters as drf_filters, status, viewsets
 from rest_framework.decorators import action
@@ -6,8 +5,8 @@ from common.api.responses import success_response
 from common.exceptions import APIValidationError
 from common.filters import PollFilter
 from common.pagination import PollPagination
-from polls.models import AnswerOption, Poll, PollQuestion, Question
-from polls.permissions import PollObjectPermission, is_admin
+from polls.models import Poll, PollQuestion, Question
+from polls.permissions import PollObjectPermission
 from polls.serializers.poll_serializer import (
     PollDetailSerializer,
     PollListSerializer,
@@ -36,33 +35,10 @@ class PollViewSet(viewsets.ModelViewSet):
         return PollDetailSerializer
 
     def get_queryset(self):
-        user = self.request.user
-        if is_admin(user):
-            queryset = Poll.objects.all()
-        else:
-            queryset = Poll.objects.filter(
-                Q(created_by=user)
-                | Q(status__in=[Poll.Status.IN_PROGRESS,
-                                Poll.Status.COMPLETED])
-            )
-
-        queryset = queryset.select_related("created_by")
-        if self.action in {"retrieve", "detailed_list", "update", "partial_update", "publish"}:
-            poll_questions = (
-                PollQuestion.objects
-                .select_related("question")
-                .prefetch_related(
-                    Prefetch(
-                        "question__answer_options",
-                        queryset=AnswerOption.objects.order_by("order", "id"),
-                    )
-                )
-                .order_by("order", "id")
-            )
-            queryset = queryset.prefetch_related(
-                Prefetch("poll_questions", queryset=poll_questions)
-            )
-        return queryset
+        return PollServices.get_accessible_polls_queryset(
+            user=self.request.user,
+            action=self.action,
+        )
 
     def create(self, request, *args, **kwargs):
         if not isinstance(request.data, dict):
@@ -115,23 +91,41 @@ class PollViewSet(viewsets.ModelViewSet):
         return self._update_draft(request, partial=False)
 
     def partial_update(self, request, *args, **kwargs): #PATCH
+        if "status" in request.data:
+            if request.data["status"] != Poll.Status.IN_PROGRESS:
+                raise APIValidationError({
+                    "status": "A draft poll can only be changed to in_progress."
+                })
+
+            poll = self.get_object()
+            published_poll = PollServices.publish_poll(
+                poll=poll,
+                user=request.user,
+            )
+            return success_response(
+                data=PollDetailSerializer(
+                    self.get_queryset().get(pk=published_poll.pk),
+                    context=self.get_serializer_context(),
+                ).data,
+                message="Poll published successfully.",
+            )
         return self._update_draft(request, partial=True)
 
-    @action(detail=True, methods=["post"], url_path="publish")
-    def publish(self, request, pk=None):
-        poll = self.get_object()
-        PollServices.validate_can_publish(poll=poll, user=request.user)
-
-        poll.status = Poll.Status.IN_PROGRESS
-        poll.save(update_fields=["status", "updated_at"])
-
-        return success_response(
-            data=PollDetailSerializer(
-                self.get_queryset().get(pk=poll.pk),
-                context=self.get_serializer_context(),
-            ).data,
-            message="Poll published successfully.",
-        )
+    # @action(detail=True, methods=["post"], url_path="publish")
+    # def publish(self, request, pk=None):
+    #     poll = self.get_object()
+    #     PollServices.validate_can_publish(poll=poll, user=request.user)
+    #
+    #     poll.status = Poll.Status.IN_PROGRESS
+    #     poll.save(update_fields=["status", "updated_at"])
+    #
+    #     return success_response(
+    #         data=PollDetailSerializer(
+    #             self.get_queryset().get(pk=poll.pk),
+    #             context=self.get_serializer_context(),
+    #         ).data,
+    #         message="Poll published successfully.",
+    #     )
 
     @action(detail=True, methods=["post"], url_path="close")
     def close(self, request, pk=None):

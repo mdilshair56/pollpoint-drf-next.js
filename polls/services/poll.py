@@ -2,11 +2,12 @@ from datetime import datetime, timedelta
 from typing import TypedDict
 
 from django.db import transaction
+from django.db.models import Prefetch, Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from common.exceptions import APIValidationError, ConflictError
-from polls.models import Poll, PollQuestion, Question, Vote
+from polls.models import AnswerOption, Poll, PollQuestion, Question
 from polls.services.question import QuestionServices
 
 
@@ -31,6 +32,43 @@ class NormalizedPollPayload(TypedDict, total=False):
 
 
 class PollServices:
+    @staticmethod
+    def get_accessible_polls_queryset(*, user, action):
+        """Return polls visible to a user, optimized for the requested action."""
+        is_admin = bool(
+            user
+            and user.is_authenticated
+            and (
+                user.is_superuser
+                or getattr(user, "role", None) in ("admin", "superadmin")
+            )
+        )
+        if is_admin:
+            queryset = Poll.objects.all()
+        else:
+            queryset = Poll.objects.filter(
+                Q(created_by=user)
+                | Q(status__in=[Poll.Status.IN_PROGRESS, Poll.Status.COMPLETED])
+            )
+
+        queryset = queryset.select_related("created_by")
+        if action in {"retrieve", "detailed_list", "update", "partial_update"}:
+            poll_questions = (
+                PollQuestion.objects
+                .select_related("question")
+                .prefetch_related(
+                    Prefetch(
+                        "question__answer_options",
+                        queryset=AnswerOption.objects.order_by("order", "id"),
+                    )
+                )
+                .order_by("order", "id")
+            )
+            queryset = queryset.prefetch_related(
+                Prefetch("poll_questions", queryset=poll_questions)
+            )
+        return queryset
+
     @staticmethod
     def can_manage_poll(*, poll, user):
         if not user or not user.is_authenticated:
@@ -362,6 +400,16 @@ class PollServices:
                         "at least two answer options before publishing."
                     )
                 })
+
+    @staticmethod
+    @transaction.atomic
+    def publish_poll(*, poll: Poll, user) -> Poll:
+        poll = Poll.objects.select_for_update().get(pk=poll.pk)
+        PollServices.validate_can_publish(poll=poll, user=user)
+
+        poll.status = Poll.Status.IN_PROGRESS
+        poll.save(update_fields=["status", "updated_at"])
+        return poll
 
     @staticmethod
     @transaction.atomic

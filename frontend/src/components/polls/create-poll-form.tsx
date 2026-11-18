@@ -124,7 +124,8 @@ export function CreatePollForm({ pollId }: { pollId?: number }) {
 
         if (shouldPublish) {
           try {
-            await pollService.publish(createdPollId);
+            // await pollService.publish(createdPollId);
+            await pollService.publishDraft(createdPollId);
           } catch (publishError) {
             window.alert(
               "The poll was saved as a draft, but publishing failed: " +

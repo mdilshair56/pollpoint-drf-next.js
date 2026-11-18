@@ -77,7 +77,8 @@ export function PollList() {
     setPublishingPollId(pollId);
     setError("");
     try {
-      await pollService.publish(pollId);
+      // await pollService.publish(pollId);
+      await pollService.publishDraft(pollId);
       const refreshed = await pollService.list(filters);
       setPolls(refreshed.polls);
       setPagination(refreshed.pagination);
