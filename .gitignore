@@ -1,6 +1,6 @@
 
 # Environment variables and secrets
-secrets.env
+backend/secrets.env
 .env
 .env.*
 !.env.example
@@ -25,6 +25,7 @@ backups/
 celerybeat-schedule
 media/
 staticfiles/
+skills/
 
 # IDE configuration
 .idea/
@@ -33,3 +34,4 @@ staticfiles/
 # Operating system files
 .DS_Store
 Thumbs.db
+Django_practice Use Cases and Test Cases.docx

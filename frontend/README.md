@@ -343,7 +343,7 @@ The reset page supports both stages of the existing Django reset serializer:
 - Request a reset email using an email address.
 - Confirm a new password using `uid`, `token`, `new_password`, and `confirm_password` from the reset link.
 
-**Backend environment dependency:** the existing `PASSWORD_RESET_FRONTEND_URL` value in the backend's private `secrets.env` should point to this frontend route, for example `http://localhost:3000/forgot-password` during local development. The backend app was not changed as requested, so verify this existing setting before testing reset emails.
+**Backend environment dependency:** the existing `PASSWORD_RESET_FRONTEND_URL` value in the backend's private `../backend/secrets.env` should point to this frontend route, for example `http://localhost:3000/forgot-password` during local development. The backend app was not changed as requested, so verify this existing setting before testing reset emails.
 
 ---
 

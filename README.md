@@ -49,7 +49,7 @@ Django_practice/
 
 ## Environment Configuration
 
-Create `secrets.env` in the project root.
+Create `backend/secrets.env` in the project root.
 
 Configure the following variables with your own credentials:
 
