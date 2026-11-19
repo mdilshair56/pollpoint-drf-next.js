@@ -4,38 +4,50 @@ A full-stack polling platform built with **Django REST Framework** and **Next.js
 
 ## Tech Stack
 
-**Backend:** Python, Django, Django REST Framework  
-**Frontend:** Next.js, React, TypeScript, Tailwind CSS  
-**Database:** PostgreSQL  
-**Background Tasks:** Celery, Celery Beat  
-**Caching & Message Broker:** Redis  
-**Authentication:** JWT, OTP, HTTP-only cookies
+- **Backend:** Python, Django, Django REST Framework
+- **Frontend:** Next.js, React, TypeScript, Tailwind CSS
+- **Database:** PostgreSQL
+- **Background Tasks:** Celery, Celery Beat
+- **Caching & Message Broker:** Redis
+- **Authentication:** JWT, OTP, HTTP-only cookies
 
 ## Features
 
 - User registration, login and email OTP verification.
 - JWT authentication and password reset.
-- Admin and Client roles with permission-based access.
+- Admin and Client roles with role-based permissions.
+- Admin invitations and invitation acceptance.
 - Poll creation and management.
 - Multiple questions and answer options per poll.
 - Draft, In Progress and Completed poll statuses.
 - Voting with duplicate-vote prevention.
 - Configurable result visibility.
-- Automatic completion of expired polls using Celery.
+- Automatic poll completion using Celery Beat.
 - Search, filtering, ordering and pagination.
-- Next.js frontend integrated with Django APIs.
+- Autocomplete suggestions for polls, questions and answer options.
+- Frontend notifications using React Hot Toast.
 
 ## Project Structure
 
 ```text
-Django_practice/
-├── auth/           # Authentication and user management
-├── polls/          # Polls, questions and voting
-├── common/         # Shared utilities
-├── core/           # Django configuration and Celery
-├── frontend/       # Next.js application
-├── manage.py
-├── secrets.env     # Local environment variables
+PollPoint/
+├── backend/
+│   ├── auth/
+│   ├── polls/
+│   ├── common/
+│   ├── core/
+│   ├── manage.py
+│   ├── requirements.txt
+│   └── secrets.env
+│
+├── frontend/
+│   ├── public/
+│   ├── src/
+│   ├── package.json
+│   └── package-lock.json
+│
+├── .venv/               # Local Python environment
+├── .gitignore
 └── README.md
 ```
 
@@ -49,9 +61,7 @@ Django_practice/
 
 ## Environment Configuration
 
-Create `secrets.env` in the project root.
-
-Configure the following variables with your own credentials:
+Create `backend/secrets.env`:
 
 ```env
 DJANGO_DEBUG=True
@@ -80,6 +90,10 @@ REDIS_URL=redis://127.0.0.1:6379/1
 REDIS_CLIENT_CLASS=django_redis.client.DefaultClient
 ```
 
+Create `frontend/.env.local` with the environment variables required by the frontend configuration.
+
+Never commit environment files or credentials.
+
 ## Installation
 
 ### Backend
@@ -87,15 +101,23 @@ REDIS_CLIENT_CLASS=django_redis.client.DefaultClient
 From the project root:
 
 ```bash
-./.venv/bin/python manage.py migrate
-./.venv/bin/python manage.py createsuperuser
+python3 -m venv .venv
+source .venv/bin/activate
+
+pip install -r backend/requirements.txt
+
+cd backend
+python manage.py migrate
+python manage.py createsuperuser
 ```
 
 ### Frontend
 
+Open another terminal:
+
 ```bash
 cd frontend
-npm install
+npm ci
 ```
 
 ## Running the Application
@@ -105,31 +127,29 @@ Start the application using four separate terminals.
 **Terminal 1 – PostgreSQL, Redis and Django**
 
 ```bash
-cd "/run/media/dilshair-zafar/0616A74316A7331B/Practice/Django_practice"
-
 sudo systemctl start postgresql
 sudo systemctl start redis-server
 
 pg_isready -h 127.0.0.1 -p 5433
 redis-cli ping
 
-./.venv/bin/python manage.py runserver
+cd backend
+../.venv/bin/python manage.py runserver
 ```
 
 **Terminal 2 – Celery Worker**
 
 ```bash
-cd "/run/media/dilshair-zafar/0616A74316A7331B/Practice/Django_practice"
-
-./.venv/bin/celery -A core worker --loglevel=info
+cd backend
+../.venv/bin/celery -A core worker --loglevel=info
 ```
 
 **Terminal 3 – Celery Beat**
 
 ```bash
-cd "/run/media/dilshair-zafar/0616A74316A7331B/Practice/Django_practice"
+cd backend
 
-./.venv/bin/celery -A core beat \
+../.venv/bin/celery -A core beat \
     --loglevel=info \
     --schedule=/tmp/pollpoint-celerybeat-schedule
 ```
@@ -137,42 +157,39 @@ cd "/run/media/dilshair-zafar/0616A74316A7331B/Practice/Django_practice"
 **Terminal 4 – Next.js Frontend**
 
 ```bash
-cd "/run/media/dilshair-zafar/0616A74316A7331B/Practice/Django_practice/frontend"
-
+cd frontend
 npm run dev
 ```
 
-Keep all four terminals running while using the application. Only one Celery Beat instance should run at a time.
+Keep all terminals running while using the application. Run only one Celery Beat instance.
 
 ## Application URLs
 
-| Service | URL |
-|---|---|
-| Frontend | http://localhost:3000 |
-| Django Backend | http://127.0.0.1:8000 |
-| Django Admin | http://127.0.0.1:8000/admin |
-| PostgreSQL | 127.0.0.1:5433 |
-| Redis | 127.0.0.1:6379 |
+| Service        | URL                                                        |
+| -------------- | ---------------------------------------------------------- |
+| Frontend       | [http://localhost:3000](http://localhost:3000)             |
+| Django Backend | [http://127.0.0.1:8000](http://127.0.0.1:8000)             |
+| Django Admin   | [http://127.0.0.1:8000/admin](http://127.0.0.1:8000/admin) |
+| PostgreSQL     | 127.0.0.1:5433                                             |
+| Redis          | 127.0.0.1:6379                                             |
 
 ## Useful Commands
 
-**Django checks**
+**Backend checks and migrations**
 
 ```bash
-./.venv/bin/python manage.py check
-```
+cd backend
 
-**Database migrations**
-
-```bash
-./.venv/bin/python manage.py makemigrations
-./.venv/bin/python manage.py migrate
+../.venv/bin/python manage.py check
+../.venv/bin/python manage.py makemigrations
+../.venv/bin/python manage.py migrate
 ```
 
 **Frontend validation**
 
 ```bash
 cd frontend
+
 npx tsc --noEmit
 npm run lint
 npm run build
@@ -180,16 +197,20 @@ npm run build
 
 ## Git Workflow
 
-The project uses a single repository for both backend and frontend.
+The backend and frontend share one Git repository.
 
 ```bash
+git switch main
+git pull --ff-only origin main
+
 git switch -c feature/your-feature-name
+
 git add .
 git commit -m "Describe your changes"
 git push -u origin feature/your-feature-name
 ```
 
-Create a Pull Request on GitHub to merge changes into `main`.
+Create a Pull Request to merge changes into `main`.
 
 ---
 
