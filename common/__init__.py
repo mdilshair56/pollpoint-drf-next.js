@@ -1,4 +1,4 @@
-from .models import TimeFramedModel
+from .time_model import TimeFramedModel
 
 __all__ = [
     "TimeFramedModel"

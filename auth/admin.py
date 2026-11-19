@@ -2,7 +2,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from .models import User, UserProfile
+from .models import AdminInvitation, User, UserProfile
 
 
 class CustomUserAdmin(UserAdmin):
@@ -52,3 +52,11 @@ class UserProfileAdmin(admin.ModelAdmin):
 
 admin.site.register(User, CustomUserAdmin)
 admin.site.register(UserProfile, UserProfileAdmin)
+
+
+@admin.register(AdminInvitation)
+class AdminInvitationAdmin(admin.ModelAdmin):
+    list_display = ("email", "status", "invited_by", "created_at", "expires_at", "responded_at")
+    list_filter = ("status", "created_at")
+    search_fields = ("email", "invited_by__email")
+    readonly_fields = ("token_hash", "created_at", "updated_at", "responded_at")

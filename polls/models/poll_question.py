@@ -23,7 +23,8 @@ class PollQuestion(models.Model):
         ]
 
     def __str__(self):
-        p_id = self.poll.id if self.poll else "No Poll"
-        q_id = self.question.id if self.question else "New"
-
-        return f"Poll ID: {p_id} | Question ID: {q_id} (Order: {self.order})"
+        return (
+            f"Poll ID: {self.poll_id or 'No Poll'} | "
+            f"Question ID: {self.question_id or 'New'} "
+            f"(Order: {self.order})"
+        )

@@ -12,14 +12,10 @@ from auth.models.user import User
 from auth.models.user_profile import UserProfile
 
 from auth.tasks import send_password_reset_email_task
-import hashlib
-import secrets
 
-from django.core.cache import cache
 
 
 from django.conf import settings
-from auth.tasks import send_login_otp_email_task
 
 UserModel = get_user_model()
 
@@ -35,6 +31,16 @@ class UserService:
             raise APIValidationError(exc.messages)
         return password
 
+    @staticmethod
+    def validate_signup_email(*, email):
+        email = email.strip()
+
+        if User.objects.filter(email__iexact=email).exists():
+            raise APIValidationError({
+                "email": "An account with this email already exists."
+            })
+
+        return email
 
     # 2. signup_view.py
     @staticmethod
@@ -45,10 +51,11 @@ class UserService:
         profile_data = validated_data.pop("profile", None)
         password = validated_data.pop("password")
 
-        role = validated_data.get("role", User.Role.CLIENT)
-        is_admin = (role == User.Role.ADMIN)
-        validated_data["is_superuser"] = is_admin
-        validated_data["is_staff"] = is_admin
+        # Public registration must never grant staff or superuser privileges.
+        validated_data.pop("role", None)
+        validated_data["role"] = User.Role.CLIENT
+        validated_data["is_superuser"] = False
+        validated_data["is_staff"] = False
 
         user = User.objects.create_user(
             password=password,
@@ -81,11 +88,11 @@ class UserService:
     # 4. reset_password_serializer.py
     @staticmethod
     def validate_password_reset_data(*, attrs):
-        email = attrs.get("email")
-        uid = attrs.get("uid")
-        token = attrs.get("token")
-        new_password = attrs.get("new_password")
-        confirm_password = attrs.get("confirm_password")
+        email = (attrs.get("email") or "").strip()
+        uid = (attrs.get("uid") or "").strip()
+        token = (attrs.get("token") or "").strip()
+        new_password = attrs.get("new_password") or ""
+        confirm_password = attrs.get("confirm_password") or ""
 
         if not any([email, uid, token, new_password, confirm_password]):
             raise APIValidationError({
@@ -97,17 +104,13 @@ class UserService:
 
         # STEP 1: User submitted email to request the reset link in terminal/email
         if email and not any([uid, token, new_password, confirm_password]):
-            user = UserModel.objects.filter(
+            # A generic response is returned regardless of whether one
+            # unambiguous active account exists for the supplied address.
+            matching_users = UserModel.objects.filter(
                 email__iexact=email,
                 is_active=True,
-            ).first()
-
-            if not user:
-                raise APIValidationError({
-                    "email": "Account doesn't exist."
-                })
-
-            attrs["user"] = user
+            )
+            attrs["user"] = matching_users.first() if matching_users.count() == 1 else None
             attrs["step"] = "send_reset_link"
             return attrs
 
@@ -115,7 +118,7 @@ class UserService:
         missing_fields = [
             field_name
             for field_name in ("uid", "token", "new_password", "confirm_password")
-            if not attrs.get(field_name)
+            if not (attrs.get(field_name) or "").strip()
         ]
         if missing_fields:
             raise APIValidationError({
@@ -172,9 +175,19 @@ class UserService:
 
     # 6. UserService.execute_password_reset() (Step 2)
     @staticmethod
+    @transaction.atomic
     def reset_user_password(*, user, new_password):
         user.set_password(new_password)
         user.save(update_fields=["password"])
+
+        # Revoke every outstanding refresh token for this account.
+        from rest_framework_simplejwt.token_blacklist.models import (
+            BlacklistedToken,
+            OutstandingToken,
+        )
+        for outstanding in OutstandingToken.objects.filter(user=user):
+            BlacklistedToken.objects.get_or_create(token=outstanding)
+
         return "Password reset successfully."
 
 
@@ -183,7 +196,9 @@ class UserService:
     def execute_password_reset(*, validated_data):
         user = validated_data["user"]
         if validated_data["step"] == "send_reset_link":
-            return UserService.send_password_reset_email(user=user)
+            if user is not None:
+                UserService.send_password_reset_email(user=user)
+            return "If an account exists for that email, a password reset link has been sent."
 
         return UserService.reset_user_password(
             user=user,
@@ -197,65 +212,24 @@ class UserService:
         return profile
 
  # Admin and Client
+class IsAdminRole(BasePermission):
+    """Allow administrative user/profile directory access only."""
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and (
+                request.user.is_superuser
+                or request.user.role in (User.Role.ADMIN, User.Role.SUPERADMIN)
+            )
+        )
+
+
 class IsAdminOrReadOnlyClient(BasePermission):
     def has_permission(self, request, view):
         if not (request.user and request.user.is_authenticated):
             return False
-
-        if request.user.is_superuser or request.user.role == "admin":
+        if request.user.is_superuser or request.user.role in (User.Role.ADMIN, User.Role.SUPERADMIN):
             return True
-
         return request.method in SAFE_METHODS
-
-
-# Login_otp. py
-
-class LoginOTPService:
-
-    @staticmethod
-    def create_challenge(user):
-        otp = f"{secrets.randbelow(1_000_000):06d}"
-
-        otp_hash = hashlib.sha256(otp.encode()).hexdigest()
-
-        cache.set(
-            f"login_otp:{user.pk}",
-            {
-                "otp_hash": otp_hash,
-                "attempts": 0,
-            },
-            timeout=settings.LOGIN_OTP_TTL_SECONDS,
-        )
-
-        send_login_otp_email_task.delay(user.email, otp)
-
-    @staticmethod
-    def verify_challenge(user, submitted_otp):
-        key = f"login_otp:{user.pk}"
-        challenge = cache.get(key)
-
-        if challenge is None:
-            return False, "Login code expired or not found. Request a new one."
-
-        if challenge["attempts"] >= settings.LOGIN_OTP_MAX_ATTEMPTS:
-            cache.delete(key)
-            return False, "Too many attempts. Request a new code."
-
-        submitted_hash = hashlib.sha256(
-            submitted_otp.encode()
-        ).hexdigest()
-
-        if not secrets.compare_digest(
-                submitted_hash,
-                challenge["otp_hash"],
-        ):
-            challenge["attempts"] += 1
-            cache.set(
-                key,
-                challenge,
-                timeout=cache.ttl(key),
-            )
-            return False, "Invalid login code."
-
-        cache.delete(key)
-        return True, "OTP verified successfully."

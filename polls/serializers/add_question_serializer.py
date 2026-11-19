@@ -1,8 +1,4 @@
 from rest_framework import serializers
-from django.db import transaction
-from polls.models.question import Question
-from polls.models.poll_question import PollQuestion
-# from polls.services.question import QuestionServices
 from polls.services.answer_options import AnswerOptionServices
 
 
@@ -15,25 +11,11 @@ class AddQuestionToPollSerializer(serializers.Serializer):
     order = serializers.IntegerField(help_text="Position of the question in this poll")
     options = OptionInputSerializer(many=True)
 
-    @transaction.atomic
-    def save(self, poll, user, questions_data=None):
-        question = Question.objects.create(
-            name=self.validated_data['question_name'],
-            created_by=user
-        )
-
-        options_data = self.validated_data['options']
-        if options_data:
-            AnswerOptionServices.bulk_create_options(
-                questions_data=questions_data, #UPDATED
-                options_data=options_data
-            )
-
-
-        PollQuestion.objects.create(
+    def save(self, poll, user):
+        return AnswerOptionServices.add_question_to_poll(
             poll=poll,
-            question=question,
-            order=self.validated_data['order']
+            user=user,
+            question_name=self.validated_data["question_name"],
+            order=self.validated_data["order"],
+            options=self.validated_data["options"],
         )
-
-        return question

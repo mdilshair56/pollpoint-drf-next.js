@@ -1,0 +1,174 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pollpoint Invitation</title>
+</head>
+
+<body style="margin:0; padding:0; background-color:#f1f5f9; font-family:Arial, Helvetica, sans-serif;">
+
+    <table width="100%" cellpadding="0" cellspacing="0" border="0"
+           style="background-color:#f1f5f9; padding:35px 15px;">
+        <tr>
+            <td align="center">
+
+                <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                       style="max-width:600px; background-color:#ffffff; border-radius:12px; overflow:hidden;">
+
+                    <!-- Header -->
+                    <tr>
+                        <td align="center"
+                            style="background-color:#1e3a8a; padding:35px 20px;">
+
+                            <h1 style="margin:0; color:#ffffff; font-size:30px;">
+                                Pollpoint
+                            </h1>
+
+                            <p style="margin:10px 0 0; color:#dbeafe; font-size:14px;">
+                                Make Every Opinion Count
+                            </p>
+
+                        </td>
+                    </tr>
+
+                    <!-- Main Content -->
+                    <tr>
+                        <td style="padding:40px 35px;">
+
+                            <p style="color:#64748b; font-size:12px; font-weight:bold; letter-spacing:1px;">
+                                YOU'RE INVITED
+                            </p>
+
+                            <h2 style="color:#0f172a; font-size:27px; line-height:1.4; margin:10px 0 20px;">
+                                You've been invited to join Pollpoint!
+                            </h2>
+
+                            <p style="color:#475569; font-size:15px; line-height:1.8;">
+                                Hello,
+                            </p>
+
+                            <p style="color:#475569; font-size:15px; line-height:1.8;">
+                                <strong style="color:#1e3a8a;">
+                                    {{ inviter_name|default:"The Pollpoint team" }}
+                                </strong>
+                                has invited you to join Pollpoint.
+                                We're excited to welcome you!
+                            </p>
+
+                            <!-- Invitation Information -->
+                            <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                                   style="background-color:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; margin:25px 0;">
+
+                                <tr>
+                                    <td style="padding:18px 20px;">
+
+                                        <p style="color:#64748b; font-size:12px; margin:0 0 7px;">
+                                            INVITATION SENT TO
+                                        </p>
+
+                                        <p style="color:#0f172a; font-size:15px; font-weight:bold; margin:0; word-break:break-word;">
+                                            {{ invitation_email }}
+                                        </p>
+
+                                        <div style="height:1px; background-color:#e2e8f0; margin:16px 0;"></div>
+
+                                        <p style="color:#64748b; font-size:12px; margin:0 0 7px;">
+                                            INVITATION EXPIRES
+                                        </p>
+
+                                        <p style="color:#dc2626; font-size:14px; font-weight:bold; margin:0;">
+                                            {{ expiry_label }}
+                                        </p>
+
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="color:#475569; font-size:15px; line-height:1.8;">
+                                Review your invitation using the button below.
+                                You can accept or decline before the expiration time.
+                            </p>
+
+                            <!-- CLICKABLE INVITATION BUTTON -->
+                            <table cellpadding="0" cellspacing="0" border="0"
+                                   align="center" style="margin:30px auto;">
+                                <tr>
+                                    <td align="center"
+                                        bgcolor="#1e3a8a"
+                                        style="background-color:#1e3a8a; border-radius:8px;">
+
+                                        <a href="{{ accept_url }}"
+                                           target="_blank"
+                                           style="display:inline-block; padding:16px 35px; color:#ffffff; font-size:15px; font-weight:bold; text-decoration:none; border-radius:8px;">
+
+                                            Review Invitation &rarr;
+
+                                        </a>
+
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- FALLBACK CLICKABLE LINK -->
+                            <p style="color:#64748b; font-size:13px; line-height:1.7; margin-top:25px;">
+                                If the button does not work, you can open your invitation using this link:
+                            </p>
+
+                            <p style="font-size:13px; line-height:1.7; word-break:break-all; margin:0;">
+
+                                <a href="{{ accept_url }}"
+                                   target="_blank"
+                                   style="color:#2563eb; text-decoration:underline;">
+
+                                    {{ accept_url }}
+
+                                </a>
+
+                            </p>
+
+                            <p style="color:#64748b; font-size:13px; line-height:1.7; margin-top:25px;">
+                                Please remember that accepting this invitation does not automatically grant you administrative permissions.
+                            </p>
+
+                        </td>
+                    </tr>
+
+                    <!-- Security Notice -->
+                    <tr>
+                        <td style="background-color:#fff7ed; padding:20px 35px; border-top:1px solid #fed7aa;">
+
+                            <p style="color:#9a3412; font-size:13px; line-height:1.7; margin:0;">
+                                <strong>Security Notice:</strong>
+                                This invitation is valid for 24 hours.
+                                If you did not expect this email, you can safely ignore it.
+                            </p>
+
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td align="center"
+                            style="background-color:#f8fafc; padding:25px 20px;">
+
+                            <p style="color:#64748b; font-size:13px; margin:0 0 8px;">
+                                Thank you for choosing Pollpoint.
+                            </p>
+
+                            <p style="color:#94a3b8; font-size:12px; margin:0;">
+                                &copy; Pollpoint. All rights reserved.
+                            </p>
+
+                        </td>
+                    </tr>
+
+                </table>
+
+            </td>
+        </tr>
+    </table>
+
+</body>
+</html>
