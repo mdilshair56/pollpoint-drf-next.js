@@ -1,16 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeading } from "@/components/common/page-heading";
+import { AutocompleteInput } from "@/components/common/autocomplete-input";
+import { notify } from "@/lib/notifications";
 import { pollService } from "@/services/poll-service";
 import type { PollCreatePayload, PollStatus, ResultVisibility } from "@/types/poll";
 import { getErrorMessage } from "@/utils/errors";
 
-type DraftQuestion = { name: string; description: string; options: string[] };
+type DraftOption = { id: string; name: string };
+type DraftQuestion = {
+  id: string;
+  name: string;
+  description: string;
+  options: DraftOption[];
+};
 
-const newQuestion = (): DraftQuestion => ({ name: "", description: "", options: ["", ""] });
+const newOption = (): DraftOption => ({
+  id: crypto.randomUUID(),
+  name: "",
+});
+
+const newQuestion = (): DraftQuestion => ({
+  id: crypto.randomUUID(),
+  name: "",
+  description: "",
+  options: [newOption(), newOption()],
+});
 
 function toLocalDateTime(value: string | null | undefined): string {
   if (!value) return "";
@@ -31,6 +49,8 @@ function toIsoDateTime(value: string): string | undefined {
 
 export function CreatePollForm({ pollId }: { pollId?: number }) {
   const router = useRouter();
+  // useId is stable between the server render and client hydration.
+  const initialQuestionId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [resultVisibility, setResultVisibility] = useState<ResultVisibility>("after_submission");
@@ -38,7 +58,17 @@ export function CreatePollForm({ pollId }: { pollId?: number }) {
   const [canManage, setCanManage] = useState(!pollId);
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
-  const [questions, setQuestions] = useState<DraftQuestion[]>([newQuestion()]);
+  const [questions, setQuestions] = useState<DraftQuestion[]>(() => [
+    {
+      id: initialQuestionId,
+      name: "",
+      description: "",
+      options: [
+        { id: initialQuestionId + "-option-1", name: "" },
+        { id: initialQuestionId + "-option-2", name: "" },
+      ],
+    },
+  ]);
   const [loading, setLoading] = useState(Boolean(pollId));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -61,9 +91,13 @@ export function CreatePollForm({ pollId }: { pollId?: number }) {
         setStartsAt(toLocalDateTime(data.starts_at));
         setEndsAt(toLocalDateTime(data.ends_at));
         setQuestions(data.questions.map((question) => ({
+          id: String(question.id),
           name: question.question_name,
           description: question.question_description,
-          options: question.options.slice().sort((a, b) => a.order - b.order).map((option) => option.name),
+          options: question.options.slice().sort((a, b) => a.order - b.order).map((option) => ({
+            id: String(option.id),
+            name: option.name,
+          })),
         })));
       })
       .catch((caught) => { if (active) setError(getErrorMessage(caught)); })
@@ -78,12 +112,27 @@ export function CreatePollForm({ pollId }: { pollId?: number }) {
   function updateOption(questionIndex: number, optionIndex: number, value: string) {
     setQuestions((current) => current.map((question, index) => {
       if (index !== questionIndex) return question;
-      return { ...question, options: question.options.map((option, itemIndex) => itemIndex === optionIndex ? value : option) };
+      return {
+        ...question,
+        options: question.options.map((option, itemIndex) => (
+          itemIndex === optionIndex ? { ...option, name: value } : option
+        )),
+      };
     }));
   }
 
   function addOption(questionIndex: number) {
-    setQuestions((current) => current.map((question, index) => index === questionIndex ? { ...question, options: [...question.options, ""] } : question));
+    const option = newOption();
+    setQuestions((current) => current.map((question, index) => (
+      index === questionIndex
+        ? { ...question, options: [...question.options, option] }
+        : question
+    )));
+  }
+
+  function addQuestion() {
+    const question = newQuestion();
+    setQuestions((current) => [...current, question]);
   }
 
   function removeOption(questionIndex: number, optionIndex: number) {
@@ -107,8 +156,8 @@ export function CreatePollForm({ pollId }: { pollId?: number }) {
       ...(loadedStatus === "draft" ? { questions: questions.map((question) => ({
         name: question.name.trim(),
         description: question.description.trim(),
-        options: question.options.filter((option) => option.trim()).map((option, index) => ({
-          name: option.trim(),
+        options: question.options.filter((option) => option.name.trim()).map((option, index) => ({
+          name: option.name.trim(),
           order: index + 1,
         })),
       })) } : {}),
@@ -116,16 +165,27 @@ export function CreatePollForm({ pollId }: { pollId?: number }) {
 
     try {
       if (pollId) {
-        await pollService.update(pollId, payload);
+        await notify.promise(pollService.update(pollId, payload), {
+          loading: "Updating poll...",
+          success: "Poll updated successfully!",
+          error: "Unable to update poll.",
+        });
         router.push("/polls/" + pollId);
       } else {
-        const result = await pollService.create(payload);
+        const result = await notify.promise(pollService.create(payload), {
+          loading: "Creating poll...",
+          success: "Poll created successfully!",
+          error: "Unable to create poll.",
+        });
         const createdPollId = result.data.id;
 
         if (shouldPublish) {
           try {
-            // await pollService.publish(createdPollId);
-            await pollService.publishDraft(createdPollId);
+            await notify.promise(pollService.publishDraft(createdPollId), {
+              loading: "Publishing poll...",
+              success: "Poll published successfully!",
+              error: "Unable to publish poll.",
+            });
           } catch (publishError) {
             window.alert(
               "The poll was saved as a draft, but publishing failed: " +
@@ -175,7 +235,15 @@ export function CreatePollForm({ pollId }: { pollId?: number }) {
           <h2 className="font-bold text-brand">Poll details</h2>
           <div>
             <label className="field-label" htmlFor="name">Poll name</label>
-            <input className="field" id="name" name="name" maxLength={100} required value={name} onChange={(event) => setName(event.target.value)} />
+            <AutocompleteInput
+              id="name"
+              name="name"
+              maxLength={100}
+              required
+              searchType="poll"
+              value={name}
+              onChange={setName}
+            />
           </div>
           <div>
             <label className="field-label" htmlFor="description">Description</label>
@@ -197,14 +265,21 @@ export function CreatePollForm({ pollId }: { pollId?: number }) {
         </section>
 
         {loadedStatus === "draft" && questions.map((question, questionIndex) => (
-          <section key={questionIndex} className="panel space-y-4 p-5">
+          <section key={question.id} className="panel space-y-4 p-5">
             <div className="flex items-center justify-between">
               <h2 className="font-bold text-brand">Question {questionIndex + 1}</h2>
               {questions.length > 1 && <button type="button" className="text-sm font-semibold text-red-600" onClick={() => setQuestions((current) => current.filter((_, index) => index !== questionIndex))}>Remove question</button>}
             </div>
             <div>
-              <label className="field-label" htmlFor={"question-" + questionIndex}>Question text</label>
-              <input className="field" id={"question-" + questionIndex} maxLength={255} value={question.name} onChange={(event) => updateQuestion(questionIndex, { name: event.target.value })} required />
+              <label className="field-label" htmlFor={"question-" + question.id}>Question text</label>
+              <AutocompleteInput
+                id={"question-" + question.id}
+                maxLength={255}
+                required
+                searchType="question"
+                value={question.name}
+                onChange={(value) => updateQuestion(questionIndex, { name: value })}
+              />
             </div>
             <div>
               <label className="field-label" htmlFor={"question-description-" + questionIndex}>Question description (optional)</label>
@@ -213,8 +288,17 @@ export function CreatePollForm({ pollId }: { pollId?: number }) {
             <div className="space-y-3">
               <p className="text-sm font-semibold text-slate-700">Answer options (at least two)</p>
               {question.options.map((option, optionIndex) => (
-                <div key={optionIndex} className="flex items-center gap-2">
-                  <input className="field" aria-label={"Option " + (optionIndex + 1)} maxLength={255} placeholder={"Option " + (optionIndex + 1)} value={option} onChange={(event) => updateOption(questionIndex, optionIndex, event.target.value)} required />
+                <div key={option.id} className="flex items-center gap-2">
+                  <AutocompleteInput
+                    id={"option-" + question.id + "-" + option.id}
+                    ariaLabel={"Option " + (optionIndex + 1)}
+                    maxLength={255}
+                    placeholder={"Option " + (optionIndex + 1)}
+                    required
+                    searchType="answer_option"
+                    value={option.name}
+                    onChange={(value) => updateOption(questionIndex, optionIndex, value)}
+                  />
                   {question.options.length > 2 && <button type="button" aria-label="Remove option" className="rounded-lg border border-border px-3 py-2 text-sm text-red-600" onClick={() => removeOption(questionIndex, optionIndex)}>×</button>}
                 </div>
               ))}
@@ -223,7 +307,7 @@ export function CreatePollForm({ pollId }: { pollId?: number }) {
           </section>
         ))}
 
-        {loadedStatus === "draft" && <button type="button" className="btn-secondary w-full" onClick={() => setQuestions((current) => [...current, newQuestion()])}>+ Add another question</button>}
+        {loadedStatus === "draft" && <button type="button" className="btn-secondary w-full" onClick={addQuestion}>+ Add another question</button>}
         <div className="flex flex-wrap justify-end gap-3">
           {pollId ? (
             <>

@@ -99,7 +99,7 @@ class InvitationService:
         invitation = queryset.filter(token_hash=token_hash).first()
         if invitation is None:
             raise APIValidationError({"token": "Invalid invitation link."})
-        invitation.refresh_expired_status()
+        InvitationService.refresh_expired_status(invitation=invitation)
         if invitation.status != AdminInvitation.Status.PENDING:
             raise ConflictError(f"This invitation is {invitation.status}.")
         return invitation

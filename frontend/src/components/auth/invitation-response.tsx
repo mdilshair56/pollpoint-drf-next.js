@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { notify } from "@/lib/notifications";
 import { adminService } from "@/services/admin-service";
 import { authService } from "@/services/auth-service";
 import { getErrorMessage } from "@/utils/errors";
@@ -30,8 +31,16 @@ export function InvitationResponse() {
     setBusy(true);
     setError("");
     setMessage("");
+    const isAccept = decision === "accept";
     try {
-      const result = await adminService.respondInvitation(token, decision);
+      const result = await notify.promise(
+        adminService.respondInvitation(token, decision),
+        {
+          loading: isAccept ? "Accepting invitation..." : "Declining invitation...",
+          success: isAccept ? "Invitation accepted!" : "Invitation declined.",
+          error: isAccept ? "Unable to accept invitation." : "Unable to decline invitation.",
+        }
+      );
       setMessage(result.message);
       if (decision === "accept") router.push("/dashboard");
     } catch (caught) {

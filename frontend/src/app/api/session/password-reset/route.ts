@@ -8,8 +8,10 @@ export async function POST(request: NextRequest) {
   }
 
   const payload = await request.json();
+  const forwardedFor = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "";
   const { response, body } = await djangoJson("/api/auth/reset-password/", {
     method: "POST",
+    headers: forwardedFor ? { "X-Forwarded-For": forwardedFor } : {},
     body: JSON.stringify(payload),
   });
 

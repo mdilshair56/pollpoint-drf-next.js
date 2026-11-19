@@ -88,11 +88,11 @@ class UserService:
     # 4. reset_password_serializer.py
     @staticmethod
     def validate_password_reset_data(*, attrs):
-        email = attrs.get("email")
-        uid = attrs.get("uid")
-        token = attrs.get("token")
-        new_password = attrs.get("new_password")
-        confirm_password = attrs.get("confirm_password")
+        email = (attrs.get("email") or "").strip()
+        uid = (attrs.get("uid") or "").strip()
+        token = (attrs.get("token") or "").strip()
+        new_password = attrs.get("new_password") or ""
+        confirm_password = attrs.get("confirm_password") or ""
 
         if not any([email, uid, token, new_password, confirm_password]):
             raise APIValidationError({
@@ -118,7 +118,7 @@ class UserService:
         missing_fields = [
             field_name
             for field_name in ("uid", "token", "new_password", "confirm_password")
-            if not attrs.get(field_name)
+            if not (attrs.get(field_name) or "").strip()
         ]
         if missing_fields:
             raise APIValidationError({

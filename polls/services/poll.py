@@ -33,8 +33,8 @@ class NormalizedPollPayload(TypedDict, total=False):
 
 class PollServices:
     @staticmethod
-    def get_accessible_polls_queryset(*, user, action):
-        """Return polls visible to a user, optimized for the requested action."""
+    def get_visible_polls_queryset(*, user):
+        """Return the polls the user may view, without serializer-specific loading."""
         is_admin = bool(
             user
             and user.is_authenticated
@@ -51,6 +51,12 @@ class PollServices:
                 | Q(status__in=[Poll.Status.IN_PROGRESS, Poll.Status.COMPLETED])
             )
 
+        return queryset
+
+    @staticmethod
+    def get_accessible_polls_queryset(*, user, action):
+        """Return polls visible to a user, optimized for the requested action."""
+        queryset = PollServices.get_visible_polls_queryset(user=user)
         queryset = queryset.select_related("created_by")
         if action in {"retrieve", "detailed_list", "update", "partial_update"}:
             poll_questions = (

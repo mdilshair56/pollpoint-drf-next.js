@@ -24,7 +24,10 @@ export class ApiClient {
           ...options.headers,
         },
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw error;
+      }
       throw new ApiError(
         "Cannot reach the application server. Check that Next.js and Django are running.",
         0,

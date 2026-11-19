@@ -14,9 +14,12 @@ import {
 
 type RouteContext = { params: Promise<{ path: string[] }> };
 
-// Invitation preview/respond are public on the backend: an invitee who is not signed in must be able
-// to open the link and decline. They are forwarded without a bearer token when no session exists.
-const PUBLIC_PATHS = new Set(["auth/invitations/preview", "auth/invitations/respond"]);
+// Public paths on the backend: requests forward without a bearer token when no session exists.
+const PUBLIC_PATHS = new Set([
+  "auth/invitations/preview",
+  "auth/invitations/respond",
+  "auth/reset-password",
+]);
 
 async function proxy(request: NextRequest, context: RouteContext) {
   if (!["GET", "HEAD"].includes(request.method) && !isSameOrigin(request)) {
@@ -31,9 +34,10 @@ async function proxy(request: NextRequest, context: RouteContext) {
   let currentRefresh = refresh;
   let access = cookieStore.get(ACCESS_COOKIE)?.value;
   let refreshed = false;
+  const forwardedFor = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "";
 
   if (!isCurrentSession(sessionId)) {
-    // Invitation preview/respond remain public for recipients who are not logged in.
+    // Public paths remain accessible for recipients who are not logged in.
     if (PUBLIC_PATHS.has(path.join("/"))) {
       const publicBody =
         request.method === "GET" || request.method === "HEAD"
@@ -47,6 +51,7 @@ async function proxy(request: NextRequest, context: RouteContext) {
           ...(request.headers.get("content-type")
             ? { "Content-Type": request.headers.get("content-type") as string }
             : {}),
+          ...(forwardedFor ? { "X-Forwarded-For": forwardedFor } : {}),
         },
         body: publicBody,
       });
@@ -88,6 +93,7 @@ async function proxy(request: NextRequest, context: RouteContext) {
         ...(request.headers.get("content-type")
           ? { "Content-Type": request.headers.get("content-type") as string }
           : {}),
+        ...(forwardedFor ? { "X-Forwarded-For": forwardedFor } : {}),
       },
       body: publicBody,
     });
@@ -122,6 +128,7 @@ async function proxy(request: NextRequest, context: RouteContext) {
         ...(request.headers.get("content-type")
           ? { "Content-Type": request.headers.get("content-type") as string }
           : {}),
+        ...(forwardedFor ? { "X-Forwarded-For": forwardedFor } : {}),
       },
       body,
     });

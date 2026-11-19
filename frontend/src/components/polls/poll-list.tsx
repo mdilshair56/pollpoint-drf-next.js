@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PageHeading } from "@/components/common/page-heading";
+import { notify } from "@/lib/notifications";
 import { pollService } from "@/services/poll-service";
 import type { PollFilters, PollSummary } from "@/types/poll";
 import type { PaginationMeta } from "@/types/api";
@@ -77,8 +78,11 @@ export function PollList() {
     setPublishingPollId(pollId);
     setError("");
     try {
-      // await pollService.publish(pollId);
-      await pollService.publishDraft(pollId);
+      await notify.promise(pollService.publishDraft(pollId), {
+        loading: "Publishing poll...",
+        success: "Poll published successfully!",
+        error: "Unable to publish poll.",
+      });
       const refreshed = await pollService.list(filters);
       setPolls(refreshed.polls);
       setPagination(refreshed.pagination);

@@ -12,6 +12,7 @@ from polls.serializers.poll_serializer import (
     PollListSerializer,
 )
 from polls.services.poll import PollServices
+from polls.services.suggestion import SuggestionService
 
 
 class PollViewSet(viewsets.ModelViewSet):
@@ -39,6 +40,19 @@ class PollViewSet(viewsets.ModelViewSet):
             user=self.request.user,
             action=self.action,
         )
+
+    def list(self, request, *args, **kwargs):
+        if request.query_params.get("mode") == "suggestions":
+            suggestions = SuggestionService.search(
+                user=request.user,
+                search_type=request.query_params.get("type"),
+                query=request.query_params.get("q"),
+            )
+            return success_response(
+                data=suggestions,
+                message="Poll suggestions retrieved successfully.",
+            )
+        return super().list(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
         if not isinstance(request.data, dict):

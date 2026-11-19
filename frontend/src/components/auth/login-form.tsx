@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useState } from "react";
+import { notify } from "@/lib/notifications";
 import { authService } from "@/services/auth-service";
 import { getErrorMessage } from "@/utils/errors";
 
@@ -15,6 +16,7 @@ export function LoginForm() {
   const [otpRequested, setOtpRequested] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
@@ -33,7 +35,11 @@ export function LoginForm() {
     setMessage("");
     setBusy(true);
     try {
-      await authService.login({ username, password });
+      await notify.promise(authService.login({ username, password }), {
+        loading: "Signing in...",
+        success: "Signed in successfully!",
+        error: "Unable to sign in.",
+      });
       continueAfterLogin();
     } catch (caught) {
       setError(getErrorMessage(caught));
@@ -48,7 +54,11 @@ export function LoginForm() {
     setMessage("");
     setBusy(true);
     try {
-      const response = await authService.requestOtp(email);
+      const response = await notify.promise(authService.requestOtp(email), {
+        loading: "Sending login code...",
+        success: "Login code sent to your email!",
+        error: "Unable to send login code.",
+      });
       setOtpRequested(true);
       setMessage(response.detail ?? "A login code has been sent to your email.");
     } catch (caught) {
@@ -64,7 +74,11 @@ export function LoginForm() {
     setMessage("");
     setBusy(true);
     try {
-      await authService.verifyOtp(email, otp);
+      await notify.promise(authService.verifyOtp(email, otp), {
+        loading: "Verifying code...",
+        success: "Signed in successfully!",
+        error: "Unable to verify code.",
+      });
       continueAfterLogin();
     } catch (caught) {
       setError(getErrorMessage(caught));
@@ -99,7 +113,25 @@ export function LoginForm() {
           </div>
           <div>
             <label className="field-label" htmlFor="password">Password</label>
-            <input id="password" type="password" className="field" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} />
+            <div className="relative">
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                className="field pr-16"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((previous) => !previous)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-interactive hover:underline"
+              >
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
           </div>
           <div className="text-right">
             <Link href="/forgot-password" className="text-sm font-semibold text-interactive hover:underline">Forgot password?</Link>
@@ -109,7 +141,7 @@ export function LoginForm() {
       ) : (
         <div className="mt-6">
           {!otpRequested ? (
-            <form onSubmit={requestOtp} className="space-y-4">autoCompleteautoComplete
+            <form onSubmit={requestOtp} className="space-y-4">
               <div>
                 <label className="field-label" htmlFor="otp-email">Email address</label>
                 <input id="otp-email" type="email" className="field" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} />

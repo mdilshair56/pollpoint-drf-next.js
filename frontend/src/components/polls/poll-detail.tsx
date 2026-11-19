@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { notify } from "@/lib/notifications";
 import { pollService } from "@/services/poll-service";
 import type { PollDetail as PollDetailType } from "@/types/poll";
 import { getErrorMessage } from "@/utils/errors";
@@ -88,8 +89,14 @@ export function PollDetailView({ pollId }: { pollId: number }) {
     setError("");
     setMessage("");
     try {
-      // const result = await pollService.publish(poll.id);
-      const result = await pollService.publishDraft(poll.id);
+      const result = await notify.promise(
+        pollService.publishDraft(poll.id),
+        {
+          loading: "Publishing poll...",
+          success: "Poll published successfully!",
+          error: "Unable to publish poll.",
+        }
+      );
       setPoll(result.data);
       setMessage(result.message ?? "Poll published successfully.");
     } catch (caught) {
@@ -105,7 +112,14 @@ export function PollDetailView({ pollId }: { pollId: number }) {
     setError("");
     setMessage("");
     try {
-      const result = await pollService.close(poll.id);
+      const result = await notify.promise(
+        pollService.close(poll.id),
+        {
+          loading: "Closing poll...",
+          success: "Poll closed successfully!",
+          error: "Unable to close poll.",
+        }
+      );
       setPoll(result.data);
       setMessage(result.message ?? "Poll closed successfully.");
     } catch (caught) {
@@ -122,7 +136,14 @@ export function PollDetailView({ pollId }: { pollId: number }) {
     setError("");
     setMessage("");
     try {
-      const result = await pollService.extend(poll.id, new Date(newEndAt).toISOString());
+      const result = await notify.promise(
+        pollService.extend(poll.id, new Date(newEndAt).toISOString()),
+        {
+          loading: "Extending poll...",
+          success: "Poll end date extended!",
+          error: "Unable to extend poll.",
+        }
+      );
       setPoll(result.data);
       setNewEndAt(toLocalDateTime(result.data.ends_at));
       setMessage(result.message ?? "Poll end date extended.");
@@ -138,7 +159,14 @@ export function PollDetailView({ pollId }: { pollId: number }) {
     setBusy(true);
     setError("");
     try {
-      await pollService.delete(poll.id);
+      await notify.promise(
+        pollService.delete(poll.id),
+        {
+          loading: "Deleting poll...",
+          success: "Poll deleted successfully!",
+          error: "Unable to delete poll.",
+        }
+      );
       router.push("/polls");
       router.refresh();
     } catch (caught) {

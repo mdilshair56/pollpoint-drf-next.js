@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { notify } from "@/lib/notifications";
 import { authService } from "@/services/auth-service";
 import { getErrorMessage } from "@/utils/errors";
 
@@ -24,15 +25,29 @@ export function PasswordResetForm() {
 
     try {
       if (hasResetToken) {
-        await authService.confirmPasswordReset({
-          uid: uid as string,
-          token: token as string,
-          new_password: String(form.get("new_password")),
-          confirm_password: String(form.get("confirm_password")),
-        });
+        await notify.promise(
+          authService.confirmPasswordReset({
+            uid: uid as string,
+            token: token as string,
+            new_password: String(form.get("new_password")),
+            confirm_password: String(form.get("confirm_password")),
+          }),
+          {
+            loading: "Updating password...",
+            success: "Password updated successfully!",
+            error: "Unable to update password.",
+          }
+        );
         setMessage("Your password has been changed. You can now sign in.");
       } else {
-        await authService.requestPasswordReset({ email: String(form.get("email")).trim() });
+        await notify.promise(
+          authService.requestPasswordReset({ email: String(form.get("email")).trim() }),
+          {
+            loading: "Sending reset link...",
+            success: "Password reset link sent!",
+            error: "Unable to send reset link.",
+          }
+        );
         setMessage("If the request was accepted, a password reset email has been sent.");
       }
     } catch (caught) {

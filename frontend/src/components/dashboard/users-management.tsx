@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { PageHeading } from "@/components/common/page-heading";
+import { notify } from "@/lib/notifications";
 import { adminService, type UserListResponse } from "@/services/admin-service";
 import type { User, UserRole } from "@/types/auth";
 import { getErrorMessage } from "@/utils/errors";
@@ -91,7 +92,14 @@ export default function UsersManagement() {
     setMessage("");
 
     try {
-      const result = await adminService.promote(user.id, role);
+      const result = await notify.promise(
+        adminService.promote(user.id, role),
+        {
+          loading: "Updating role...",
+          success: "User role updated successfully!",
+          error: "Unable to update role.",
+        }
+      );
       setMessage(result.message || `Updated ${user.email} to ${role}.`);
       await loadUsers();
     } catch (caught) {

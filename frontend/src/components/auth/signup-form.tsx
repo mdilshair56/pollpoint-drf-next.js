@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { notify } from "@/lib/notifications";
 import { authService } from "@/services/auth-service";
 import { getErrorMessage } from "@/utils/errors";
 
@@ -23,15 +24,22 @@ export function SignupForm() {
       .filter(([, value]) => value !== "")) as Record<string, string>;
 
     try {
-      await authService.signup({
-        username: String(form.get("username")).trim(),
-        first_name: String(form.get("first_name")).trim(),
-        last_name: String(form.get("last_name")).trim(),
-        email: String(form.get("email")).trim(),
-        phone_number: String(form.get("phone_number")).trim() || undefined,
-        password: String(form.get("password")),
-        ...(Object.keys(profile).length ? { profile } : {}),
-      });
+      await notify.promise(
+        authService.signup({
+          username: String(form.get("username")).trim(),
+          first_name: String(form.get("first_name")).trim(),
+          last_name: String(form.get("last_name")).trim(),
+          email: String(form.get("email")).trim(),
+          phone_number: String(form.get("phone_number")).trim() || undefined,
+          password: String(form.get("password")),
+          ...(Object.keys(profile).length ? { profile } : {}),
+        }),
+        {
+          loading: "Creating account...",
+          success: "Account created successfully!",
+          error: "Unable to create account.",
+        }
+      );
       const next = searchParams.get("next");
       const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "";
       router.push("/login?registered=1" + (safeNext ? "&next=" + encodeURIComponent(safeNext) : ""));

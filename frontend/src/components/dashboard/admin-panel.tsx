@@ -1,8 +1,8 @@
-
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
 import { PageHeading } from "@/components/common/page-heading";
+import { notify } from "@/lib/notifications";
 import {
   adminService,
   type AdminInvitation,
@@ -49,7 +49,14 @@ export function AdminPanel() {
     setMessage("");
 
     try {
-      const result = await adminService.invite(email.trim());
+      const result = await notify.promise(
+        adminService.invite(email.trim()),
+        {
+          loading: "Sending invitation...",
+          success: "Invitation sent successfully!",
+          error: "Unable to send invitation.",
+        }
+      );
 
       setMessage(result.message);
       setEmail("");

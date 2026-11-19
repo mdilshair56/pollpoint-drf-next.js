@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError } from "@/lib/api/api-client";
+import { notify } from "@/lib/notifications";
 import { voteService } from "@/services/vote-service";
 import type { PollDetail } from "@/types/poll";
 import type {
@@ -214,7 +215,14 @@ export default function VoteSection({
     setVoteMessage("");
 
     try {
-      const response = await voteService.castVotes(payload);
+      const response = await notify.promise(
+        voteService.castVotes(payload),
+        {
+          loading: "Submitting votes...",
+          success: "Votes submitted successfully!",
+          error: "Unable to submit your votes.",
+        }
+      );
       const submittedVotes = response.data.polls.flatMap(
         (group) => group.votes,
       );
@@ -447,8 +455,6 @@ export default function VoteSection({
           </p>
         )}
       </div>
-
-
     </section>
   );
 }

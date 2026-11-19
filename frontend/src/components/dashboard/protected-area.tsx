@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { notify } from "@/lib/notifications";
 import { authService } from "@/services/auth-service";
 import type { User } from "@/types/auth";
 
@@ -29,7 +30,11 @@ export function ProtectedArea({ children }: Readonly<{ children: React.ReactNode
 
   async function handleLogout() {
     try {
-      await authService.logout();
+      await notify.promise(authService.logout(), {
+        loading: "Signing out...",
+        success: "Signed out successfully!",
+        error: "Unable to sign out.",
+      });
     } finally {
       router.replace("/login");
       router.refresh();

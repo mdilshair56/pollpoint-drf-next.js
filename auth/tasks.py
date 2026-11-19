@@ -10,7 +10,11 @@ from django.utils import timezone
 
 
 #INVITATION EMAIL
-@shared_task
+@shared_task(
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_kwargs={"max_retries": 3},
+)
 def send_admin_invitation_email_task(email, accept_url, inviter_name, expires_at):
     expires = datetime.fromisoformat(expires_at)
 
@@ -57,7 +61,11 @@ def send_admin_invitation_email_task(email, accept_url, inviter_name, expires_at
     message.send(fail_silently=False)
 
 # RESET PASSWORD EMAIL
-@shared_task
+@shared_task(
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_kwargs={"max_retries": 3},
+)
 def send_password_reset_email_task(email, reset_url):
     subject = "Reset Your Password"
     html_content = render_to_string(
@@ -88,7 +96,11 @@ def send_password_reset_email_task(email, reset_url):
 
 
 # OTP Request
-@shared_task
+@shared_task(
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_kwargs={"max_retries": 3},
+)
 def send_login_otp_email_task(email, otp):
     subject = "Login OTP"
     html_content = render_to_string(

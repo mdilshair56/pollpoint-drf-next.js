@@ -170,10 +170,11 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    "NUM_PROXIES": 1,
     "DEFAULT_THROTTLE_RATES": {
         "otp_request": "3/minute",
         "otp_verify": "5/minute",
-        "password_reset": "3/hour",
+        "password_reset": "20/hour",
     },
     "EXCEPTION_HANDLER": (
         "common.exceptions.handler.custom_exception_handler"
