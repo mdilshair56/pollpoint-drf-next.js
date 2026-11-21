@@ -33,3 +33,7 @@ staticfiles/
 # Operating system files
 .DS_Store
 Thumbs.db
+
+#Irrelevant Data
+skills/
+Django_practice Use Cases and Test Cases.docx
