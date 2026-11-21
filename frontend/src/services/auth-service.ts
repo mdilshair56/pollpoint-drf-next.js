@@ -5,7 +5,6 @@ import type {
   PasswordResetConfirm,
   PasswordResetRequest,
   SignupPayload,
-  UpdateProfilePayload,
   User,
   UserProfile,
 } from "@/types/auth";
@@ -36,10 +35,6 @@ export class AuthService {
 
   getMyProfile() {
     return apiClient.get<UserProfile>("/api/backend/auth/profiles/mine/");
-  }
-
-  updateMyProfile(payload: UpdateProfilePayload) {
-    return apiClient.patch<UserProfile>("/api/backend/auth/profiles/mine/", payload);
   }
 
   logout() {
