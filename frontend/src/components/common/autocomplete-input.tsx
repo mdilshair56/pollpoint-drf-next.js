@@ -1,15 +1,21 @@
 "use client";
 
 import { useId, useState } from "react";
-import { useAutocomplete } from "@/hooks/use-autocomplete";
-import type { SuggestionSearchType } from "@/types/suggestion";
+import {
+  type AutocompleteItem,
+  type AutocompleteSearchType,
+  type SearchFunction,
+  useAutocomplete,
+} from "@/hooks/use-autocomplete";
 
-type AutocompleteInputProps = {
+export type AutocompleteInputProps<T extends AutocompleteItem = AutocompleteItem> = {
   id: string;
   name?: string;
   value: string;
   onChange: (value: string) => void;
-  searchType: SuggestionSearchType;
+  searchFn?: SearchFunction<T>;
+  searchType?: AutocompleteSearchType;
+  searchKey?: string;
   ariaLabel?: string;
   className?: string;
   disabled?: boolean;
@@ -18,23 +24,27 @@ type AutocompleteInputProps = {
   required?: boolean;
 };
 
-export function AutocompleteInput({
+export function AutocompleteInput<T extends AutocompleteItem = AutocompleteItem>({
   id,
   name,
   value,
   onChange,
+  searchFn,
   searchType,
+  searchKey,
   ariaLabel,
   className = "field",
   disabled = false,
   maxLength,
   placeholder,
   required = false,
-}: AutocompleteInputProps) {
+}: AutocompleteInputProps<T>) {
   const listboxId = useId();
   const [highlighted, setHighlighted] = useState({ key: "", index: -1 });
-  const autocomplete = useAutocomplete({
+  const autocomplete = useAutocomplete<T>({
+    searchFn,
     searchType,
+    searchKey,
     value,
     disabled,
     onSelect: (suggestion) => onChange(suggestion.name),
@@ -155,9 +165,6 @@ export function AutocompleteInput({
                   }}
                 >
                   <span className="block font-medium">{suggestion.name}</span>
-                  {suggestion.question_name && (
-                    <span className="block text-xs text-muted">{suggestion.question_name}</span>
-                  )}
                 </li>
               ))}
             </ul>

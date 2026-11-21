@@ -1,16 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { suggestionService } from "@/services/suggestion-service";
-import type { Suggestion, SuggestionSearchType } from "@/types/suggestion";
+import { searchPolls } from "@/services/poll-service";
+import { searchQuestions } from "@/services/question-service";
 
 const DEBOUNCE_MS = 2_000;
 const CACHE_TTL_MS = 30_000;
 const MAX_CACHE_ENTRIES = 20;
 
-type CachedSuggestions = {
+export type AutocompleteItem = {
+  id: number | string;
+  name: string;
+};
+
+export type SearchFunction<T extends AutocompleteItem = AutocompleteItem> = (
+  query: string,
+  signal?: AbortSignal,
+) => Promise<T[]>;
+
+export type AutocompleteSearchType = "poll" | "question";
+
+type CachedSuggestions<T> = {
   expiresAt: number;
-  suggestions: Suggestion[];
+  suggestions: T[];
 };
 
 type KeyedValue<T> = {
@@ -18,10 +30,12 @@ type KeyedValue<T> = {
   value: T;
 };
 
-type UseAutocompleteOptions = {
-  searchType: SuggestionSearchType;
+export type UseAutocompleteOptions<T extends AutocompleteItem = AutocompleteItem> = {
+  searchFn?: SearchFunction<T>;
+  searchType?: AutocompleteSearchType;
+  searchKey?: string;
   value: string;
-  onSelect: (suggestion: Suggestion) => void;
+  onSelect: (suggestion: T) => void;
   disabled?: boolean;
 };
 
@@ -34,25 +48,41 @@ function isAbortedRequest(error: unknown): boolean {
   );
 }
 
-export function useAutocomplete({
+export function useAutocomplete<T extends AutocompleteItem = AutocompleteItem>({
+  searchFn,
   searchType,
+  searchKey,
   value,
   onSelect,
   disabled = false,
-}: UseAutocompleteOptions) {
+}: UseAutocompleteOptions<T>) {
   const [isActive, setIsActive] = useState(false);
   const [dismissedKey, setDismissedKey] = useState<string | null>(null);
-  const [suggestionResult, setSuggestionResult] = useState<KeyedValue<Suggestion[]> | null>(null);
+  const [suggestionResult, setSuggestionResult] = useState<KeyedValue<T[]> | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [searchedKey, setSearchedKey] = useState<string | null>(null);
   const [errorResult, setErrorResult] = useState<KeyedValue<string> | null>(null);
   const timerRef = useRef<number | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
-  const cacheRef = useRef(new Map<string, CachedSuggestions>());
+  const cacheRef = useRef(new Map<string, CachedSuggestions<T>>());
   const requestSequenceRef = useRef(0);
 
+  const effectiveSearchFn: SearchFunction<T> | undefined =
+    searchFn ??
+    (searchType === "poll"
+      ? (searchPolls as unknown as SearchFunction<T>)
+      : searchType === "question"
+      ? (searchQuestions as unknown as SearchFunction<T>)
+      : undefined);
+
+  const searchFnRef = useRef(effectiveSearchFn);
+  useEffect(() => {
+    searchFnRef.current = effectiveSearchFn;
+  }, [effectiveSearchFn]);
+
+  const prefix = searchKey ?? searchType ?? searchFn?.name ?? "autocomplete";
   const normalizedQuery = value.trim();
-  const queryKey = searchType + ":" + normalizedQuery.toLowerCase();
+  const queryKey = prefix + ":" + normalizedQuery.toLowerCase();
 
   const cancelPendingWork = useCallback(() => {
     requestSequenceRef.current += 1;
@@ -94,14 +124,18 @@ export function useAutocomplete({
         return;
       }
 
+      const currentSearchFn = searchFnRef.current;
+      if (!currentSearchFn) {
+        return;
+      }
+
       const controller = new AbortController();
       const requestId = ++requestSequenceRef.current;
       controllerRef.current = controller;
       setLoadingKey(queryKey);
 
       try {
-        const result = await suggestionService.search(
-          searchType,
+        const result = await currentSearchFn(
           normalizedQuery,
           controller.signal,
         );
@@ -146,8 +180,6 @@ export function useAutocomplete({
     isActive,
     normalizedQuery,
     queryKey,
-    searchType,
-    value,
   ]);
 
   const focus = useCallback(() => {
@@ -183,8 +215,8 @@ export function useAutocomplete({
     setDismissedKey(queryKey);
   }, [cancelPendingWork, queryKey]);
 
-  const selectSuggestion = useCallback((suggestion: Suggestion) => {
-    const selectedKey = searchType + ":" + suggestion.name.trim().toLowerCase();
+  const selectSuggestion = useCallback((suggestion: T) => {
+    const selectedKey = prefix + ":" + suggestion.name.trim().toLowerCase();
     cancelPendingWork();
     setSuggestionResult(null);
     setLoadingKey(null);
@@ -192,7 +224,7 @@ export function useAutocomplete({
     setErrorResult(null);
     setDismissedKey(selectedKey);
     onSelect(suggestion);
-  }, [cancelPendingWork, onSelect, searchType]);
+  }, [cancelPendingWork, onSelect, prefix]);
 
   return {
     error: errorResult?.key === queryKey ? errorResult.value : null,
