@@ -205,11 +205,11 @@ class UserService:
             new_password=validated_data["new_password"],
         )
 
-    # 8. profile_view.py
-    @staticmethod
-    def get_or_create_user_profile(*, user):
-        profile, _ = UserProfile.objects.get_or_create(user=user)
-        return profile
+    # # 8. profile_view.py
+    # @staticmethod
+    # def get_or_create_user_profile(*, user):
+    #     profile, _ = UserProfile.objects.get_or_create(user=user)
+    #     return profile
 
  # Admin and Client
 class IsAdminRole(BasePermission):

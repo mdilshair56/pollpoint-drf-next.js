@@ -1,5 +1,7 @@
 from typing import Any
+from django.db.models import Q
 
+from polls.permissions import is_admin
 from polls.models import AnswerOption, Question
 
 
@@ -44,3 +46,19 @@ class QuestionServices:
             })
 
         return created_questions
+    @staticmethod
+    def get_accessible_questions_queryset(*, user):
+
+        if is_admin(user):
+            return Question.objects.all()
+
+        from polls.services.poll import PollServices
+
+        visible_polls = PollServices.get_visible_polls_queryset(
+            user=user
+        )
+
+        return Question.objects.filter(
+            Q(created_by=user)
+            | Q(poll_questions__poll__in=visible_polls)
+        ).distinct()
