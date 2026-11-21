@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { PageHeading } from "@/components/common/page-heading";
 import { AutocompleteInput } from "@/components/common/autocomplete-input";
 import { notify } from "@/lib/notifications";
-import { pollService } from "@/services/poll-service";
+import { pollService, searchPolls } from "@/services/poll-service";
+import { searchQuestions } from "@/services/question-service";
 import type { PollCreatePayload, PollStatus, ResultVisibility } from "@/types/poll";
 import { getErrorMessage } from "@/utils/errors";
 
@@ -240,6 +241,7 @@ export function CreatePollForm({ pollId }: { pollId?: number }) {
               name="name"
               maxLength={100}
               required
+              searchFn={searchPolls}
               searchType="poll"
               value={name}
               onChange={setName}
@@ -276,6 +278,7 @@ export function CreatePollForm({ pollId }: { pollId?: number }) {
                 id={"question-" + question.id}
                 maxLength={255}
                 required
+                searchFn={searchQuestions}
                 searchType="question"
                 value={question.name}
                 onChange={(value) => updateQuestion(questionIndex, { name: value })}
@@ -289,15 +292,15 @@ export function CreatePollForm({ pollId }: { pollId?: number }) {
               <p className="text-sm font-semibold text-slate-700">Answer options (at least two)</p>
               {question.options.map((option, optionIndex) => (
                 <div key={option.id} className="flex items-center gap-2">
-                  <AutocompleteInput
+                  <input
                     id={"option-" + question.id + "-" + option.id}
-                    ariaLabel={"Option " + (optionIndex + 1)}
+                    className="field"
+                    aria-label={"Option " + (optionIndex + 1)}
                     maxLength={255}
                     placeholder={"Option " + (optionIndex + 1)}
                     required
-                    searchType="answer_option"
                     value={option.name}
-                    onChange={(value) => updateOption(questionIndex, optionIndex, value)}
+                    onChange={(event) => updateOption(questionIndex, optionIndex, event.target.value)}
                   />
                   {question.options.length > 2 && <button type="button" aria-label="Remove option" className="rounded-lg border border-border px-3 py-2 text-sm text-red-600" onClick={() => removeOption(questionIndex, optionIndex)}>×</button>}
                 </div>

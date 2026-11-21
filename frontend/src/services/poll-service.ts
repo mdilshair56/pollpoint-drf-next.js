@@ -26,6 +26,15 @@ export class PollService {
     };
   }
 
+  async searchPolls(query: string, signal?: AbortSignal): Promise<PollSummary[]> {
+    const params = new URLSearchParams({ search: query });
+    const response = await apiClient.request<PaginatedApiResponse<PollSummary>>(
+      "/api/backend/polls/?" + params.toString(),
+      { method: "GET", signal },
+    );
+    return response.data ?? [];
+  }
+
   getById(id: number) {
     return apiClient.get<ApiEnvelope<PollDetail>>("/api/backend/polls/" + id + "/");
   }
@@ -69,3 +78,5 @@ export class PollService {
 }
 
 export const pollService = new PollService();
+export const searchPolls = (query: string, signal?: AbortSignal) =>
+  pollService.searchPolls(query, signal);
