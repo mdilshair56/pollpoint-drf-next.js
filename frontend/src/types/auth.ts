@@ -21,6 +21,23 @@ export interface UserProfile {
   country: string;
 }
 
+export interface UpdateProfilePayload {
+  father_name?: string;
+  date_of_birth?: string | null;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+}
+
+export interface EmailChangeRequestPayload {
+  email: string;
+}
+
+export interface EmailChangeVerifyPayload {
+  otp: string;
+}
+
 export interface LoginPayload {
   username: string;
   password: string;

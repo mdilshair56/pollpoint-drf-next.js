@@ -1,10 +1,13 @@
 import { apiClient } from "@/lib/api/api-client";
 import type { ApiEnvelope } from "@/types/api";
 import type {
+  EmailChangeRequestPayload,
+  EmailChangeVerifyPayload,
   LoginPayload,
   PasswordResetConfirm,
   PasswordResetRequest,
   SignupPayload,
+  UpdateProfilePayload,
   User,
   UserProfile,
 } from "@/types/auth";
@@ -35,6 +38,24 @@ export class AuthService {
 
   getMyProfile() {
     return apiClient.get<UserProfile>("/api/backend/auth/profiles/mine/");
+  }
+
+  updateMyProfile(payload: UpdateProfilePayload) {
+    return apiClient.patch<UserProfile>("/api/backend/auth/profiles/update/", payload);
+  }
+
+  requestEmailChange(payload: EmailChangeRequestPayload) {
+    return apiClient.patch<ApiEnvelope<null>>(
+      "/api/backend/auth/users/me/email/",
+      payload,
+    );
+  }
+
+  verifyEmailChange(payload: EmailChangeVerifyPayload) {
+    return apiClient.post<ApiEnvelope<{ email: string }>>(
+      "/api/backend/auth/users/me/email/verify/",
+      payload,
+    );
   }
 
   logout() {
