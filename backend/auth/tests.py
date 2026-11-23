@@ -284,3 +284,157 @@ class PasswordResetTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.data["success"])
+
+from unittest.mock import patch
+from django.core.cache import cache
+from django.test import TestCase, override_settings
+from rest_framework.test import APIClient
+from auth.services.email_change import EmailChangeService
+from auth.services.login_otp import LoginOTPService
+
+User = get_user_model()
+
+
+@override_settings(
+    CACHES={
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "email-change-tests",
+        }
+    }
+)
+class EmailChangeTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="testuser",
+            email="original@example.com",
+            password="TestPassword123!",
+        )
+        self.other_user = User.objects.create_user(
+            username="otheruser",
+            email="other@example.com",
+            password="TestPassword123!",
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def tearDown(self):
+        cache.clear()
+
+    @patch("auth.services.email_change.send_email_change_otp_task.delay")
+    def test_request_email_change_queues_task_and_caches_pending_email(self, send_task):
+        response = self.client.patch(
+            "/api/auth/users/me/email/",
+            {"email": "new@example.com"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["success"])
+        send_task.assert_called_once()
+        sent_email, otp = send_task.call_args.args
+        self.assertEqual(sent_email, "new@example.com")
+
+        # Original email must remain unchanged in DB
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, "original@example.com")
+
+        # Cache challenge verification
+        challenge = cache.get(f"email_change_otp:{self.user.pk}")
+        self.assertIsNotNone(challenge)
+        self.assertEqual(challenge["pending_email"], "new@example.com")
+        self.assertEqual(challenge["purpose"], "email_change")
+
+    def test_request_email_change_rejects_duplicate_email(self):
+        response = self.client.patch(
+            "/api/auth/users/me/email/",
+            {"email": "other@example.com"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("already exists", str(response.data))
+
+    def test_request_email_change_rejects_current_email(self):
+        response = self.client.patch(
+            "/api/auth/users/me/email/",
+            {"email": "original@example.com"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("already your current email", str(response.data))
+
+    @patch("auth.services.email_change.send_email_change_otp_task.delay")
+    def test_verify_email_change_success_updates_email(self, send_task):
+        EmailChangeService.request_email_change(
+            user=self.user,
+            new_email="verified.new@example.com",
+        )
+        _, otp = send_task.call_args.args
+
+        response = self.client.post(
+            "/api/auth/users/me/email/verify/",
+            {"otp": otp},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["success"])
+        self.assertEqual(response.data["data"]["email"], "verified.new@example.com")
+
+        # Database email is now updated
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, "verified.new@example.com")
+
+        # Challenge consumed
+        self.assertIsNone(cache.get(f"email_change_otp:{self.user.pk}"))
+
+    @patch("auth.services.email_change.send_email_change_otp_task.delay")
+    def test_otp_replay_fails(self, send_task):
+        EmailChangeService.request_email_change(
+            user=self.user,
+            new_email="replay@example.com",
+        )
+        _, otp = send_task.call_args.args
+
+        # First verification succeeds
+        first = self.client.post("/api/auth/users/me/email/verify/", {"otp": otp}, format="json")
+        self.assertEqual(first.status_code, 200)
+
+        # Replay attempt fails
+        second = self.client.post("/api/auth/users/me/email/verify/", {"otp": otp}, format="json")
+        self.assertEqual(second.status_code, 400)
+        self.assertFalse(second.data["success"])
+
+    def test_cross_purpose_login_otp_rejected(self):
+        # Create a login OTP challenge for user
+        LoginOTPService.create_challenge(self.user)
+        login_challenge = cache.get(f"login_otp:{self.user.pk}")
+        self.assertIsNotNone(login_challenge)
+
+        # Attempt to use email verify endpoint
+        response = self.client.post(
+            "/api/auth/users/me/email/verify/",
+            {"otp": "123456"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Invalid or expired verification code.", str(response.data))
+
+    @patch("auth.services.email_change.send_email_change_otp_task.delay")
+    def test_user_cannot_verify_another_users_challenge(self, send_task):
+        # Request change for self.user
+        EmailChangeService.request_email_change(
+            user=self.user,
+            new_email="user1.new@example.com",
+        )
+        _, otp = send_task.call_args.args
+
+        # Authenticate as other_user
+        self.client.force_authenticate(user=self.other_user)
+
+        response = self.client.post(
+            "/api/auth/users/me/email/verify/",
+            {"otp": otp},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Invalid or expired verification code.", str(response.data))

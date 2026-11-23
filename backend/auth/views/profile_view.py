@@ -10,6 +10,14 @@ from ..serializers.user_profile_serializer import UserProfileSerializer
 from ..services.user import IsAdminRole
 from rest_framework.exceptions import NotFound
 
+from rest_framework.throttling import ScopedRateThrottle
+from common.api.responses import success_response
+from ..serializers.email_change_serializer import (
+    EmailChangeRequestSerializer,
+    EmailChangeVerifySerializer,
+)
+from ..services.email_change import EmailChangeService
+
 User = get_user_model()
 
 
@@ -26,11 +34,64 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [IsAdminRole]
 
+    def get_throttles(self):
+        if self.action == "request_email_change":
+            throttle = ScopedRateThrottle()
+            throttle.scope = "otp_request"
+            return [throttle]
+        if self.action == "verify_email_change":
+            throttle = ScopedRateThrottle()
+            throttle.scope = "otp_verify"
+            return [throttle]
+        return super().get_throttles()
+
     @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
     def me(self, request):
         """GET /api/auth/users/me/"""
         serializer = self.get_serializer(request.user)
         return Response(serializer.data)
+
+    @action(
+        detail=False,
+        methods=["patch"],
+        permission_classes=[IsAuthenticated],
+        throttle_classes=[ScopedRateThrottle],
+        url_path="me/email",
+    )
+    def request_email_change(self, request):
+        """PATCH /api/auth/users/me/email/"""
+        serializer = EmailChangeRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        new_email = serializer.validated_data["email"]
+        EmailChangeService.request_email_change(user=request.user, new_email=new_email)
+
+        return success_response(
+            message="A verification code has been sent to your new email address."
+        )
+
+    @action(
+        detail=False,
+        methods=["post"],
+        permission_classes=[IsAuthenticated],
+        throttle_classes=[ScopedRateThrottle],
+        url_path="me/email/verify",
+    )
+    def verify_email_change(self, request):
+        """POST /api/auth/users/me/email/verify/"""
+        serializer = EmailChangeVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = EmailChangeService.verify_email_change(
+            user=request.user,
+            submitted_otp=serializer.validated_data["otp"],
+        )
+
+        return success_response(
+            data={"email": user.email},
+            message="Email address updated successfully.",
+        )
+
 
 class ProfileViewSet(viewsets.ReadOnlyModelViewSet):
 

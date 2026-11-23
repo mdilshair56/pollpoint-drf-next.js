@@ -127,3 +127,35 @@ def send_login_otp_email_task(email, otp):
     )
     email_message.attach_alternative(html_content, "text/html")
     email_message.send(fail_silently=False)
+
+# EMAIL CHANGE OTP
+@shared_task(
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_kwargs={"max_retries": 3},
+)
+def send_email_change_otp_task(email, otp):
+    subject = "Verify Your New Email Address"
+    html_content = render_to_string(
+        "auth/emails/email_change_otp.html",
+        {"otp": otp},
+    )
+    text_content = (
+        "Hello,\n\n"
+        "We received a request to change the email address for your Pollpoint account.\n\n"
+        f"Your verification code is: {otp}\n\n"
+        "This code expires in 3 minutes.\n\n"
+        "Never share this code with anyone.\n\n"
+        "If you did not request this change, you can safely ignore this email.\n"
+        "Your account email remains unchanged until verified.\n\n"
+        "Best regards,\n"
+        "The Security Team"
+    )
+    email_message = EmailMultiAlternatives(
+        subject=subject,
+        body=text_content,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[email],
+    )
+    email_message.attach_alternative(html_content, "text/html")
+    email_message.send(fail_silently=False)

@@ -1,3 +1,5 @@
+from enum import UNIQUE
+
 from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
 from django.db import models
 
@@ -30,7 +32,7 @@ class User(AbstractUser):
         ADMIN = "admin", "Admin"
         CLIENT = "client", "Client"
 
-    email = models.EmailField(blank=False)
+    email = models.EmailField(blank=False, null=False, unique=True)
     role = models.CharField(
         max_length=20,
         choices=Role.choices,
