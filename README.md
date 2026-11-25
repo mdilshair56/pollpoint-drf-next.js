@@ -1,30 +1,44 @@
 # PollPoint – Full-Stack Polling Application
 
-A full-stack polling platform built with **Django REST Framework** and **Next.js**, featuring secure authentication, role-based access, poll management, voting and results.
+A full-stack polling platform built with **Django REST Framework** and **Next.js**, featuring secure authentication, role-based access, poll management, voting, real-time analytics, exportable reports, and automated reporting.
 
 ## Tech Stack
 
 - **Backend:** Python, Django, Django REST Framework
-- **Frontend:** Next.js, React, TypeScript, Tailwind CSS
+- **Frontend:** Next.js (App Router), React 19, TypeScript, Tailwind CSS
 - **Database:** PostgreSQL
-- **Background Tasks:** Celery, Celery Beat
+- **Background Tasks & Automation:** Celery, Celery Beat
 - **Caching & Message Broker:** Redis
+- **Data Export & Reporting:** `openpyxl` (Excel), `WeasyPrint` (Visual Branded PDF)
+- **Data Visualization:** Recharts
 - **Authentication:** JWT, OTP, HTTP-only cookies
 
 ## Features
 
-- User registration, login and email OTP verification.
-- JWT authentication and password reset.
-- Admin and Client roles with role-based permissions.
-- Admin invitations and invitation acceptance.
-- Poll creation and management.
+- User registration, login, and email OTP verification.
+- JWT authentication and secure password reset.
+- Profile management with authenticated email change and verification.
+- Admin, Superadmin, and Client roles with strict role-based access control.
+- Admin invitations and invitation acceptance flow.
+- Poll creation and management with configurable start and end dates.
 - Multiple questions and answer options per poll.
-- Draft, In Progress and Completed poll statuses.
-- Voting with duplicate-vote prevention.
-- Configurable result visibility.
-- Automatic poll completion using Celery Beat.
-- Search, filtering, ordering and pagination.
-- Autocomplete suggestions for polls, questions and answer options.
+- Draft, In Progress, and Completed poll statuses.
+- Voting with duplicate-vote prevention and real-time validation.
+- Configurable result visibility (`Live`, `After Submission`, `Polls End`, `Restricted`).
+- **Poll Results & Real-Time Analytics:**
+  - Dedicated Analytics page (`/polls/results`) with unified filtering, search, and pagination.
+  - Interactive donut/pie charts with dynamic center response counters using Recharts.
+  - Descending rank option breakdown with dual vertical columns and horizontal progress bars layout switcher.
+  - Interactive voter hover tooltips displaying voter names per answer option.
+  - Midnight gradient header banners with creator details and timing stats.
+- **Exportable Reports & Downloads:**
+  - **Raw Data (.xlsx):** Clean Excel reports generated using `openpyxl` with metadata, sequential Question Numbers (`Question 1`, `Question 2`), Option Numbers (`1`, `2`, `3`), vote counts, percentages, and voter lists.
+  - **Visual Branded PDF:** Publication-ready branded PDF reports generated using `WeasyPrint` with SVG charts, luxury styling, and embedded voter boxes.
+  - **Strict Export Permissions:** Admins/Superadmins can export any poll; regular clients can only export their own created polls.
+- **Automated Reporting with Celery Beat:**
+  - Automated poll completion when expiry time is reached.
+  - Opt-in email report delivery (`Excel Raw Report` and/or `Visual Branded PDF`) sent directly to poll creators upon completion.
+- Autocomplete suggestions for polls, questions, and answer options.
 - Frontend notifications using React Hot Toast.
 
 ## Project Structure
@@ -34,6 +48,16 @@ PollPoint/
 ├── backend/
 │   ├── auth/
 │   ├── polls/
+│   │   ├── models/
+│   │   ├── serializers/
+│   │   ├── services/
+│   │   │   ├── poll.py
+│   │   │   ├── poll_reports.py    # Headless Excel and WeasyPrint PDF generator
+│   │   │   └── poll_results.py    # Batched vote query & analytics service
+│   │   ├── views/
+│   │   │   ├── poll.py
+│   │   │   └── poll_results.py    # Analytics & export endpoints
+│   │   └── tasks.py               # Celery finalization & report mailing tasks
 │   ├── common/
 │   ├── core/
 │   ├── manage.py
@@ -43,6 +67,14 @@ PollPoint/
 ├── frontend/
 │   ├── public/
 │   ├── src/
+│   │   ├── app/
+│   │   │   ├── (dashboard)/polls/results/ # Real-time analytics view
+│   │   │   └── api/backend/[...path]/     # Streaming binary reverse proxy
+│   │   ├── components/
+│   │   │   ├── poll-results/              # Charts, cards, and export menus
+│   │   │   └── dashboard/                 # Protected area layout & nav menu
+│   │   ├── services/                      # API service clients
+│   │   └── types/                         # TypeScript interfaces
 │   ├── package.json
 │   └── package-lock.json
 │
@@ -53,8 +85,8 @@ PollPoint/
 
 ## Requirements
 
-- Python
-- Node.js and npm
+- Python 3.12+
+- Node.js 20+ and npm
 - PostgreSQL
 - Redis
 - Git
@@ -75,6 +107,7 @@ EMAIL_PORT=587
 EMAIL_USE_TLS=True
 EMAIL_HOST_USER=your-email
 EMAIL_HOST_PASSWORD=your-app-password
+DEFAULT_FROM_EMAIL=your-email
 
 PASSWORD_RESET_FRONTEND_URL=http://localhost:3000/reset-password
 PASSWORD_RESET_TIMEOUT=3600
@@ -90,7 +123,11 @@ REDIS_URL=redis://127.0.0.1:6379/1
 REDIS_CLIENT_CLASS=django_redis.client.DefaultClient
 ```
 
-Create `frontend/.env.local` with the environment variables required by the frontend configuration.
+Create `frontend/.env.local` with the environment variables required by the frontend configuration:
+
+```env
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
+```
 
 Never commit environment files or credentials.
 
@@ -148,7 +185,6 @@ cd backend
 
 ```bash
 cd backend
-
 ../.venv/bin/celery -A core beat \
     --loglevel=info \
     --schedule=/tmp/pollpoint-celerybeat-schedule
@@ -165,13 +201,23 @@ Keep all terminals running while using the application. Run only one Celery Beat
 
 ## Application URLs
 
-| Service        | URL                                                        |
-| -------------- | ---------------------------------------------------------- |
-| Frontend       | [http://localhost:3000](http://localhost:3000)             |
-| Django Backend | [http://127.0.0.1:8000](http://127.0.0.1:8000)             |
-| Django Admin   | [http://127.0.0.1:8000/admin](http://127.0.0.1:8000/admin) |
-| PostgreSQL     | 127.0.0.1:5433                                             |
-| Redis          | 127.0.0.1:6379                                             |
+| Service             | URL                                                        |
+| ------------------- | ---------------------------------------------------------- |
+| Frontend            | [http://localhost:3000](http://localhost:3000)             |
+| Poll Results Page   | [http://localhost:3000/polls/results](http://localhost:3000/polls/results) |
+| Django Backend      | [http://127.0.0.1:8000](http://127.0.0.1:8000)             |
+| Django Admin        | [http://127.0.0.1:8000/admin](http://127.0.0.1:8000/admin) |
+| PostgreSQL          | 127.0.0.1:5433                                             |
+| Redis               | 127.0.0.1:6379                                             |
+
+## API Endpoints for Poll Results & Exports
+
+| Method | Endpoint | Description | Access |
+| ------ | -------- | ----------- | ------ |
+| `GET`  | `/api/poll-results/` | List eligible poll results with filters & pagination | Authenticated |
+| `GET`  | `/api/poll-results/{id}/` | Get full breakdown and response metrics for a poll | Eligible Users |
+| `GET`  | `/api/poll-results/{id}/export-excel/` | Download raw `.xlsx` spreadsheet | Admins or Poll Creator |
+| `GET`  | `/api/poll-results/{id}/export-pdf/` | Download visual branded `.pdf` report | Admins or Poll Creator |
 
 ## Useful Commands
 
