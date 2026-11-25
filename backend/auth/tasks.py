@@ -1,5 +1,4 @@
 from datetime import datetime
-from html import escape
 
 from celery import shared_task
 from django.conf import settings

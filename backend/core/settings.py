@@ -214,9 +214,9 @@ CELERY_RESULT_BACKEND = env_config("CELERY_RESULT_BACKEND")
 
 # Check for expired in-progress polls every 30 seconds.
 CELERY_BEAT_SCHEDULE = {
-    "complete-expired-polls-every-59-seconds": {
+    "complete-expired-polls-every-30-seconds": {
         "task": "polls.tasks.complete_expired_polls",
-        "schedule": 59.0,
+        "schedule": 30.0,
     },
 }
 

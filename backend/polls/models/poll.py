@@ -34,6 +34,10 @@ class Poll(TimeFramedModel):
         choices=ResultVisibility.choices,
         default=ResultVisibility.AFTER_SUBMISSION,
     )
+    email_report_on_completion = models.BooleanField(default=False)
+    email_report_excel = models.BooleanField(default=False)
+    email_report_pdf = models.BooleanField(default=False)
+    report_email_sent_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = "Poll"
@@ -44,6 +48,13 @@ class Poll(TimeFramedModel):
                 Lower("name"),
                 name="unique_poll_name_ci",
             )
+        ]
+
+        indexes = [
+            models.Index(
+                fields=["status", "result_visibility", "-created_at"],
+                name="idx_poll_status_vis_created",
+            ),
         ]
 
     def __str__(self):

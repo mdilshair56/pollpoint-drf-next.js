@@ -26,6 +26,9 @@ class NormalizedPollPayload(TypedDict, total=False):
     name: str
     description: str
     result_visibility: Poll.ResultVisibility
+    email_report_on_completion: bool
+    email_report_excel: bool
+    email_report_pdf: bool
     starts_at: datetime
     ends_at: datetime
     questions: list[NormalizedQuestionPayload] | None
@@ -132,6 +135,44 @@ class PollServices:
         if visibility not in allowed_visibility:
             raise APIValidationError({"result_visibility": "Invalid choice value."})
 
+        email_report_on_completion = poll_data.get(
+            "email_report_on_completion",
+            existing_poll.email_report_on_completion if existing_poll else False,
+        )
+        if not isinstance(email_report_on_completion, bool):
+            raise APIValidationError({
+                "email_report_on_completion": "Choose whether to email the report."
+            })
+
+        email_report_excel = poll_data.get(
+            "email_report_excel",
+            existing_poll.email_report_excel if existing_poll else False,
+        )
+        email_report_pdf = poll_data.get(
+            "email_report_pdf",
+            existing_poll.email_report_pdf if existing_poll else False,
+        )
+        if not isinstance(email_report_excel, bool):
+            raise APIValidationError({
+                "email_report_excel": "Choose whether to include the Excel report."
+            })
+        if not isinstance(email_report_pdf, bool):
+            raise APIValidationError({
+                "email_report_pdf": "Choose whether to include the PDF report."
+            })
+        if email_report_on_completion and not (email_report_excel or email_report_pdf):
+            raise APIValidationError({
+                "email_report_on_completion": (
+                    "Select at least one report format to email."
+                )
+            })
+        if not email_report_on_completion and (email_report_excel or email_report_pdf):
+            raise APIValidationError({
+                "email_report_on_completion": (
+                    "Enable report emails before selecting report formats."
+                )
+            })
+
         default_start = existing_poll.starts_at if existing_poll else timezone.now()
         default_end = existing_poll.ends_at if existing_poll else default_start + timedelta(days=1)
         starts_at = PollServices._parse_datetime(
@@ -212,6 +253,9 @@ class PollServices:
             "name": name,
             "description": description.strip(),
             "result_visibility": visibility,
+            "email_report_on_completion": email_report_on_completion,
+            "email_report_excel": email_report_excel,
+            "email_report_pdf": email_report_pdf,
             "starts_at": starts_at,
             "ends_at": ends_at,
             "questions": normalized_questions,
@@ -249,6 +293,9 @@ class PollServices:
             description=normalized["description"],
             status=Poll.Status.DRAFT,
             result_visibility=normalized["result_visibility"],
+            email_report_on_completion=normalized["email_report_on_completion"],
+            email_report_excel=normalized["email_report_excel"],
+            email_report_pdf=normalized["email_report_pdf"],
             starts_at=normalized["starts_at"],
             ends_at=normalized["ends_at"],
         )
@@ -340,6 +387,9 @@ class PollServices:
         poll.name = normalized["name"]
         poll.description = normalized["description"]
         poll.result_visibility = normalized["result_visibility"]
+        poll.email_report_on_completion = normalized["email_report_on_completion"]
+        poll.email_report_excel = normalized["email_report_excel"]
+        poll.email_report_pdf = normalized["email_report_pdf"]
         poll.starts_at = normalized["starts_at"]
         poll.ends_at = normalized["ends_at"]
 
@@ -347,6 +397,9 @@ class PollServices:
             "name",
             "description",
             "result_visibility",
+            "email_report_on_completion",
+            "email_report_excel",
+            "email_report_pdf",
             "starts_at",
             "ends_at",
             "updated_at",
@@ -390,6 +443,30 @@ class PollServices:
             raise APIValidationError({
                 "ends_at": "End time must be after start time."
             })
+        if poll.email_report_on_completion:
+            if not (poll.email_report_excel or poll.email_report_pdf):
+                raise APIValidationError({
+                    "email_report_on_completion": (
+                        "Select at least one report format to email."
+                    )
+                })
+            from django.core.exceptions import ValidationError as DjangoValidationError
+            from django.core.validators import validate_email
+
+            try:
+                validate_email(poll.created_by.email)
+            except DjangoValidationError:
+                raise APIValidationError({
+                    "email_report_on_completion": (
+                        "A valid email address is required to receive the poll report."
+                    )
+                }) from None
+        elif poll.email_report_excel or poll.email_report_pdf:
+            raise APIValidationError({
+                "email_report_on_completion": (
+                    "Enable report emails before selecting report formats."
+                )
+            })
 
         poll_questions = poll.poll_questions.prefetch_related(
             "question__answer_options"
@@ -415,6 +492,14 @@ class PollServices:
 
         poll.status = Poll.Status.IN_PROGRESS
         poll.save(update_fields=["status", "updated_at"])
+        from polls.tasks import finalize_poll_and_email_report
+
+        transaction.on_commit(
+            lambda: finalize_poll_and_email_report.apply_async(
+                args=(poll.pk,),
+                eta=poll.ends_at,
+            )
+        )
         return poll
 
     @staticmethod

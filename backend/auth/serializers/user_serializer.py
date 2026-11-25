@@ -19,9 +19,12 @@ class UserSerializer(serializers.ModelSerializer):
 
 # Mini-serializer
 class MiniUserSerializer(serializers.ModelSerializer):
+    user_id = serializers.IntegerField(source="id", read_only=True)
+
     class Meta:
         model = User
         fields = [
+            "user_id",
             "first_name",
             "last_name",
         ]

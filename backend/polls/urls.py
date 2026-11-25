@@ -1,12 +1,14 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from polls.views.question import QuestionsList
 from polls.views.poll import PollViewSet
+from polls.views.poll_results import PollResultsViewSet
+from polls.views.question import QuestionsList
 from polls.views.vote import VoteCastView, VoteResultView
 
 
 router = DefaultRouter()
 router.register(r"polls", PollViewSet, basename="poll")
+router.register(r"poll-results", PollResultsViewSet, basename="poll-results")
 
 urlpatterns = [
     path("polls/vote/", VoteCastView.as_view(), name="vote-cast"),

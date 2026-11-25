@@ -162,6 +162,66 @@ class PollPublishValidationTests(TestCase):
 
         PollServices.validate_can_publish(poll=self.poll, user=self.owner)
 
+    def test_report_opt_in_requires_a_valid_creator_email(self):
+        self._add_question(option_count=2)
+        self.poll.email_report_on_completion = True
+        self.poll.email_report_pdf = True
+        self.owner.email = ""
+        self.owner.save(update_fields=["email"])
+
+        with self.assertRaises(APIValidationError):
+            PollServices.validate_can_publish(poll=self.poll, user=self.owner)
+
+    def test_report_opt_in_must_be_a_boolean(self):
+        with self.assertRaises(APIValidationError):
+            PollServices.validate_and_normalize_payload({
+                "name": "Boolean validation poll",
+                "email_report_on_completion": "false",
+            })
+
+    def test_publishing_schedules_poll_finalization_at_end_time(self):
+        from unittest.mock import patch
+
+        self._add_question(option_count=2)
+        self.poll.email_report_on_completion = True
+        self.poll.email_report_pdf = True
+        self.poll.save(update_fields=["email_report_on_completion", "email_report_pdf"])
+
+        with patch("polls.tasks.finalize_poll_and_email_report.apply_async") as schedule:
+            with self.captureOnCommitCallbacks(execute=True):
+                published = PollServices.publish_poll(poll=self.poll, user=self.owner)
+
+        self.assertEqual(published.status, Poll.Status.IN_PROGRESS)
+        schedule.assert_called_once_with(args=(self.poll.pk,), eta=self.poll.ends_at)
+
+    def test_report_email_requires_at_least_one_format(self):
+        with self.assertRaises(APIValidationError):
+            PollServices.validate_and_normalize_payload({
+                "name": "Missing report format poll",
+                "email_report_on_completion": True,
+            })
+
+    def test_report_format_cannot_be_selected_without_email_opt_in(self):
+        with self.assertRaises(APIValidationError):
+            PollServices.validate_and_normalize_payload({
+                "name": "Unrequested report format poll",
+                "email_report_pdf": True,
+            })
+
+    def test_report_email_can_select_both_formats(self):
+        starts_at = timezone.now() + timedelta(hours=1)
+        payload = PollServices.validate_and_normalize_payload({
+            "name": "Both report formats poll",
+            "email_report_on_completion": True,
+            "email_report_excel": True,
+            "email_report_pdf": True,
+            "starts_at": starts_at,
+            "ends_at": starts_at + timedelta(days=1),
+        })
+
+        self.assertTrue(payload["email_report_excel"])
+        self.assertTrue(payload["email_report_pdf"])
+
     def test_non_owner_cannot_publish(self):
         with self.assertRaises(ConflictError):
             PollServices.validate_can_publish(poll=self.poll, user=self.other_user)
@@ -189,6 +249,78 @@ class PollPublishValidationTests(TestCase):
         self.poll.save(update_fields=["ends_at", "status"])
         with self.assertRaises(ConflictError):
             PollServices.validate_can_publish(poll=self.poll, user=self.owner)
+
+
+class PollReportEmailTaskTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            username="report-owner",
+            email="report-owner@example.com",
+            password="test-password",
+        )
+
+    def _run_report_task(self, *, include_excel, include_pdf):
+        import sys
+        from io import BytesIO
+        from types import ModuleType
+        from unittest.mock import Mock, patch
+
+        from polls.tasks import finalize_poll_and_email_report
+
+        poll = Poll.objects.create(
+            created_by=self.owner,
+            name="Report attachment poll",
+            status=Poll.Status.COMPLETED,
+            starts_at=timezone.now() - timedelta(days=2),
+            ends_at=timezone.now() - timedelta(days=1),
+            email_report_on_completion=True,
+            email_report_excel=include_excel,
+            email_report_pdf=include_pdf,
+        )
+        excel_generator = Mock(return_value=BytesIO(b"excel"))
+        pdf_generator = Mock(return_value=BytesIO(b"pdf"))
+        report_module = ModuleType("polls.services.poll_reports")
+        report_module.PollReportGenerator = SimpleNamespace(
+            generate_excel=excel_generator,
+            generate_pdf=pdf_generator,
+        )
+        email = Mock()
+        email.send.return_value = 1
+
+        with (
+            patch.dict(sys.modules, {"polls.services.poll_reports": report_module}),
+            patch("polls.tasks.PollResultsService.compute_results_for_polls", return_value=[{}]),
+            patch("polls.tasks.EmailMultiAlternatives", return_value=email),
+            patch("polls.tasks.render_to_string", return_value="<p>Report</p>"),
+        ):
+            finalize_poll_and_email_report.run(poll.pk)
+
+        attachment_names = {call.args[0] for call in email.attach.call_args_list}
+        expected_names = set()
+        if include_excel:
+            expected_names.add(f"poll_{poll.pk}_results.xlsx")
+        if include_pdf:
+            expected_names.add(f"poll_{poll.pk}_report.pdf")
+
+        self.assertEqual(attachment_names, expected_names)
+        if include_excel:
+            excel_generator.assert_called_once()
+        else:
+            excel_generator.assert_not_called()
+        if include_pdf:
+            pdf_generator.assert_called_once()
+        else:
+            pdf_generator.assert_not_called()
+        self.assertIsNotNone(Poll.objects.get(pk=poll.pk).report_email_sent_at)
+
+    def test_sends_only_selected_excel_attachment(self):
+        self._run_report_task(include_excel=True, include_pdf=False)
+
+    def test_sends_only_selected_pdf_attachment(self):
+        self._run_report_task(include_excel=False, include_pdf=True)
+
+    def test_sends_both_selected_attachments(self):
+        self._run_report_task(include_excel=True, include_pdf=True)
 
 
 class PollSuggestionApiTests(TestCase):

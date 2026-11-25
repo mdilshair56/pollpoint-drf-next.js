@@ -1,4 +1,3 @@
-# from django.db.models import query
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters as drf_filters, status, viewsets
 from rest_framework.decorators import action
@@ -13,7 +12,6 @@ from polls.serializers.poll_serializer import (
     PollListSerializer,
 )
 from polls.services.poll import PollServices
-# from polls.services.suggestion import SuggestionService
 
 
 class PollViewSet(viewsets.ModelViewSet):
@@ -76,6 +74,9 @@ class PollViewSet(viewsets.ModelViewSet):
                 "description": poll.description,
                 "status": poll.status,
                 "result_visibility": poll.result_visibility,
+                "email_report_on_completion": poll.email_report_on_completion,
+                "email_report_excel": poll.email_report_excel,
+                "email_report_pdf": poll.email_report_pdf,
                 "starts_at": poll.starts_at,
                 "ends_at": poll.ends_at,
                 "questions": poll.questions_data,
@@ -134,22 +135,6 @@ class PollViewSet(viewsets.ModelViewSet):
             )
         return self._update_draft(request, partial=True)
 
-    # @action(detail=True, methods=["post"], url_path="publish")
-    # def publish(self, request, pk=None):
-    #     poll = self.get_object()
-    #     PollServices.validate_can_publish(poll=poll, user=request.user)
-    #
-    #     poll.status = Poll.Status.IN_PROGRESS
-    #     poll.save(update_fields=["status", "updated_at"])
-    #
-    #     return success_response(
-    #         data=PollDetailSerializer(
-    #             self.get_queryset().get(pk=poll.pk),
-    #             context=self.get_serializer_context(),
-    #         ).data,
-    #         message="Poll published successfully.",
-    #     )
-
     @action(detail=True, methods=["post"], url_path="close")
     def close(self, request, pk=None):
         poll = self.get_object()
@@ -162,22 +147,6 @@ class PollViewSet(viewsets.ModelViewSet):
             message="Poll closed successfully. Voting is no longer accepted.",
         )
 
-    # @action(detail=True, methods=["post"], url_path="extend")
-    # def extend(self, request, pk=None):
-    #     poll = self.get_object()
-    #     serializer = PollExtendSerializer(data=request.data)
-    #     serializer.is_valid(raise_exception=True)
-    #     extended_poll = PollServices.extend_poll(
-    #         poll=poll,
-    #         new_ends_at=serializer.validated_data["ends_at"],
-    #     )
-    #     return success_response(
-    #         data=PollDetailSerializer(
-    #             self.get_queryset().get(pk=extended_poll.pk),
-    #             context=self.get_serializer_context(),
-    #         ).data,
-    #         message="Poll end date extended successfully.",
-    #     )
 
     def destroy(self, request, *args, **kwargs):
         poll = self.get_object()
@@ -196,15 +165,3 @@ class PollViewSet(viewsets.ModelViewSet):
             message="Poll deleted successfully.",
             status_code=status.HTTP_200_OK,
         )
-
-    # @action(detail=False, methods=["get"], url_path="details")
-    # def detailed_list(self, request, *args, **kwargs):
-    #     queryset = self.filter_queryset(self.get_queryset())
-    #     page = self.paginate_queryset(queryset)
-    #     serializer = self.get_serializer(page if page is not None else queryset, many=True)
-    #     if page is not None:
-    #         return self.get_paginated_response(serializer.data)
-    #     return success_response(
-    #         data=serializer.data,
-    #         message="All poll details retrieved successfully.",
-    #     )
