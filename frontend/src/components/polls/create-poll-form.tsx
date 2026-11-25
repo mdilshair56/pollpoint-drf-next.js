@@ -55,6 +55,9 @@ export function CreatePollForm({ pollId }: { pollId?: number }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [resultVisibility, setResultVisibility] = useState<ResultVisibility>("after_submission");
+  const [emailReportOnCompletion, setEmailReportOnCompletion] = useState(false);
+  const [emailReportExcel, setEmailReportExcel] = useState(false);
+  const [emailReportPdf, setEmailReportPdf] = useState(false);
   const [loadedStatus, setLoadedStatus] = useState<PollStatus>("draft");
   const [canManage, setCanManage] = useState(!pollId);
   const [startsAt, setStartsAt] = useState("");
@@ -89,6 +92,9 @@ export function CreatePollForm({ pollId }: { pollId?: number }) {
         setName(data.name);
         setDescription(data.description);
         setResultVisibility(data.result_visibility);
+        setEmailReportOnCompletion(data.email_report_on_completion);
+        setEmailReportExcel(data.email_report_excel);
+        setEmailReportPdf(data.email_report_pdf);
         setStartsAt(toLocalDateTime(data.starts_at));
         setEndsAt(toLocalDateTime(data.ends_at));
         setQuestions(data.questions.map((question) => ({
@@ -146,14 +152,35 @@ export function CreatePollForm({ pollId }: { pollId?: number }) {
     const shouldPublish = submitter?.value === "publish";
 
     setError("");
+    const startsAtIso = toIsoDateTime(startsAt);
+    const endsAtIso = toIsoDateTime(endsAt);
+    if (!startsAtIso || !endsAtIso) {
+      setError("Enter valid poll start and end times.");
+      return;
+    }
+    if (new Date(startsAtIso).getTime() <= Date.now()) {
+      setError("The poll start time must be in the future.");
+      return;
+    }
+    if (new Date(endsAtIso).getTime() <= new Date(startsAtIso).getTime()) {
+      setError("The poll end time must be after its start time.");
+      return;
+    }
+    if (emailReportOnCompletion && !emailReportExcel && !emailReportPdf) {
+      setError("Choose at least one report format to email.");
+      return;
+    }
     setBusy(true);
 
     const payload: PollCreatePayload = {
       name: name.trim(),
       description: description.trim(),
       result_visibility: resultVisibility,
-      starts_at: toIsoDateTime(startsAt),
-      ends_at: toIsoDateTime(endsAt),
+      email_report_on_completion: emailReportOnCompletion,
+      email_report_excel: emailReportExcel,
+      email_report_pdf: emailReportPdf,
+      starts_at: startsAtIso,
+      ends_at: endsAtIso,
       ...(loadedStatus === "draft" ? { questions: questions.map((question) => ({
         name: question.name.trim(),
         description: question.description.trim(),
@@ -261,9 +288,60 @@ export function CreatePollForm({ pollId }: { pollId?: number }) {
             </select>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div><label className="field-label" htmlFor="starts_at">Starts at</label><input className="field" type="datetime-local" id="starts_at" value={startsAt} disabled={loadedStatus !== "draft"} onChange={(event) => setStartsAt(event.target.value)} /></div>
-            <div><label className="field-label" htmlFor="ends_at">Ends at</label><input className="field" type="datetime-local" id="ends_at" value={endsAt} disabled={loadedStatus === "completed"} onChange={(event) => setEndsAt(event.target.value)} /></div>
+            <div><label className="field-label" htmlFor="starts_at">Starts at</label><input className="field" type="datetime-local" id="starts_at" required value={startsAt} disabled={loadedStatus !== "draft"} onChange={(event) => setStartsAt(event.target.value)} /></div>
+            <div><label className="field-label" htmlFor="ends_at">Ends at</label><input className="field" type="datetime-local" id="ends_at" required value={endsAt} disabled={loadedStatus === "completed"} onChange={(event) => setEndsAt(event.target.value)} /></div>
           </div>
+          <label htmlFor="email_report_on_completion" className="flex items-start gap-3 rounded-lg border border-border p-4">
+            <input
+              id="email_report_on_completion"
+              type="checkbox"
+              className="mt-1 h-4 w-4 accent-blue-600"
+              checked={emailReportOnCompletion}
+              disabled={loadedStatus !== "draft"}
+              onChange={(event) => {
+                const enabled = event.target.checked;
+                setEmailReportOnCompletion(enabled);
+                if (!enabled) {
+                  setEmailReportExcel(false);
+                  setEmailReportPdf(false);
+                }
+              }}
+            />
+            <span>
+              <span className="block text-sm font-semibold text-brand">Email me the report when this poll ends</span>
+              <span className="mt-1 block text-sm text-muted">We’ll send the completed poll report to the poll creator’s account email.</span>
+            </span>
+          </label>
+          {emailReportOnCompletion && (
+            <fieldset className="ml-7 space-y-3 rounded-lg border border-border p-4">
+              <legend className="px-1 text-sm font-semibold text-slate-700">Report attachments</legend>
+              <label htmlFor="email_report_excel" className="flex items-center gap-3 text-sm text-slate-700">
+                <input
+                  id="email_report_excel"
+                  type="checkbox"
+                  className="h-4 w-4 accent-blue-600"
+                  checked={emailReportExcel}
+                  disabled={loadedStatus !== "draft"}
+                  onChange={(event) => setEmailReportExcel(event.target.checked)}
+                />
+                Excel Raw Report (.xlsx)
+              </label>
+              <label htmlFor="email_report_pdf" className="flex items-center gap-3 text-sm text-slate-700">
+                <input
+                  id="email_report_pdf"
+                  type="checkbox"
+                  className="h-4 w-4 accent-blue-600"
+                  checked={emailReportPdf}
+                  disabled={loadedStatus !== "draft"}
+                  onChange={(event) => setEmailReportPdf(event.target.checked)}
+                />
+                Visual Branded Report (.pdf)
+              </label>
+              {!emailReportExcel && !emailReportPdf && (
+                <p role="alert" className="text-sm text-red-700">Select at least one report format.</p>
+              )}
+            </fieldset>
+          )}
         </section>
 
         {loadedStatus === "draft" && questions.map((question, questionIndex) => (

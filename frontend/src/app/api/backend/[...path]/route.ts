@@ -55,13 +55,16 @@ async function proxy(request: NextRequest, context: RouteContext) {
         },
         body: publicBody,
       });
-      const publicText = await publicResponse.text();
+      const publicBuffer = await publicResponse.arrayBuffer();
 
-      return new NextResponse(publicText || null, {
+      return new NextResponse(publicBuffer, {
         status: publicResponse.status,
         headers: {
           "Content-Type": publicResponse.headers.get("content-type") ?? "application/json",
           "Cache-Control": "no-store",
+          ...(publicResponse.headers.get("content-disposition")
+            ? { "Content-Disposition": publicResponse.headers.get("content-disposition")! }
+            : {}),
         },
       });
     }
@@ -97,12 +100,15 @@ async function proxy(request: NextRequest, context: RouteContext) {
       },
       body: publicBody,
     });
-    const publicText = await publicResponse.text();
-    return new NextResponse(publicText || null, {
+    const publicBuffer = await publicResponse.arrayBuffer();
+    return new NextResponse(publicBuffer, {
       status: publicResponse.status,
       headers: {
         "Content-Type": publicResponse.headers.get("content-type") ?? "application/json",
         "Cache-Control": "no-store",
+        ...(publicResponse.headers.get("content-disposition")
+          ? { "Content-Disposition": publicResponse.headers.get("content-disposition")! }
+          : {}),
       },
     });
   }
@@ -123,7 +129,7 @@ async function proxy(request: NextRequest, context: RouteContext) {
       method,
       cache: "no-store",
       headers: {
-        Accept: "application/json",
+        Accept: "*/*",
         Authorization: "Bearer " + token,
         ...(request.headers.get("content-type")
           ? { "Content-Type": request.headers.get("content-type") as string }
@@ -145,12 +151,15 @@ async function proxy(request: NextRequest, context: RouteContext) {
     }
   }
 
-  const responseText = await backendResponse.text();
-  const result = new NextResponse(responseText || null, {
+  const responseBuffer = await backendResponse.arrayBuffer();
+  const result = new NextResponse(responseBuffer, {
     status: backendResponse.status,
     headers: {
       "Content-Type": backendResponse.headers.get("content-type") ?? "application/json",
       "Cache-Control": "no-store",
+      ...(backendResponse.headers.get("content-disposition")
+        ? { "Content-Disposition": backendResponse.headers.get("content-disposition")! }
+        : {}),
     },
   });
 

@@ -40,6 +40,9 @@ export interface PollDetail {
   description: string;
   status: PollStatus;
   result_visibility: ResultVisibility;
+  email_report_on_completion: boolean;
+  email_report_excel: boolean;
+  email_report_pdf: boolean;
   created_by: MiniUser;
   can_manage: boolean;
   starts_at: string | null;
@@ -66,6 +69,9 @@ export interface PollCreatePayload {
   name: string;
   description: string;
   result_visibility: ResultVisibility;
+  email_report_on_completion: boolean;
+  email_report_excel: boolean;
+  email_report_pdf: boolean;
   starts_at?: string;
   ends_at?: string;
   questions?: {
@@ -81,6 +87,9 @@ export interface PollCreated {
   description: string;
   status: PollStatus;
   result_visibility: ResultVisibility;
+  email_report_on_completion: boolean;
+  email_report_excel: boolean;
+  email_report_pdf: boolean;
   questions: unknown[];
 }
 
